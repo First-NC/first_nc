@@ -20,8 +20,9 @@ test("workflow no longer requests the unsupported macOS Intel runner", () => {
 
 test("workflow allows macOS fallback packaging without mandatory Apple signing validation", () => {
   assert.doesNotMatch(workflow, /Validate Apple signing config/);
-  assert.match(workflow, /Prepare Apple API key/);
-  assert.match(workflow, /APPLE_API_KEY_PATH/);
+  assert.doesNotMatch(workflow, /&& secrets\./);
+  assert.match(workflow, /RAW_APPLE_API_KEY/);
+  assert.match(workflow, /export APPLE_API_KEY_PATH=/);
   assert.doesNotMatch(workflow, /jobs:\s+build:\s+env:\s+APPLE_CERTIFICATE/s);
   assert.match(workflow, /RAW_APPLE_CERTIFICATE/);
 });
