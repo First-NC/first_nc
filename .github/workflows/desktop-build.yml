@@ -59,6 +59,7 @@ jobs:
           RAW_APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           RAW_APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           RAW_APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        shell: bash
         run: |
           if [ "${{ matrix.package_script }}" = "package:mac" ] && [ -n "$RAW_APPLE_API_KEY" ]; then
             printf '%s' "$RAW_APPLE_API_KEY" > "$RUNNER_TEMP/AuthKey.p8"

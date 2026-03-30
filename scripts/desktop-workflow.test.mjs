@@ -26,3 +26,10 @@ test("workflow allows macOS fallback packaging without mandatory Apple signing v
   assert.doesNotMatch(workflow, /jobs:\s+build:\s+env:\s+APPLE_CERTIFICATE/s);
   assert.match(workflow, /RAW_APPLE_CERTIFICATE/);
 });
+
+test("workflow runs the bundle step with bash on every runner", () => {
+  assert.match(
+    workflow,
+    /-\s+name:\s+Build bundles[\s\S]*?shell:\s+bash[\s\S]*?run:\s+\|/,
+  );
+});
