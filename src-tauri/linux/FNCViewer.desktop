@@ -2,9 +2,9 @@
 Type=Application
 Name=First NC Viewer
 Comment=First NC Viewer Cross-Platform
-Exec=fncviewer %F
-Icon=fncviewer
+Exec=FirstNCViewer %F
+Icon=FirstNCViewer
 Terminal=false
 Categories=Utility;Development;
-StartupWMClass=fncviewer
+StartupWMClass=FirstNCViewer
 MimeType=application/x-fncviewer-nc;application/x-fncviewer-anc;

@@ -39,7 +39,7 @@
       "deb": {
         "desktopTemplate": "linux/FNCViewer.desktop",
         "files": {
-          "/usr/share/mime/packages/fncviewer.xml": "linux/fncviewer.xml"
+          "/usr/share/mime/packages/first-nc-viewer.xml": "linux/fncviewer.xml"
         },
         "postInstallScript": "linux/postinst.sh",
         "postRemoveScript": "linux/postrm.sh"
