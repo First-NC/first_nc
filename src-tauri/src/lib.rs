@@ -698,6 +698,29 @@ fn startup_splash_window_background() -> tauri::webview::Color {
     tauri::webview::Color(0, 0, 0, 0)
 }
 
+fn position_window_centered(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+    width: f64,
+    height: f64,
+) {
+    if let Ok(Some(monitor)) = app.primary_monitor() {
+        let monitor_pos = monitor.position();
+        let monitor_size = monitor.size();
+        let scale = monitor.scale_factor().max(1.0);
+        let logical_width = monitor_size.width as f64 / scale;
+        let logical_height = monitor_size.height as f64 / scale;
+        let centered_x = monitor_pos.x as f64 / scale + ((logical_width - width) * 0.5).max(0.0);
+        let centered_y = monitor_pos.y as f64 / scale + ((logical_height - height) * 0.5).max(0.0);
+        let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(
+            centered_x,
+            centered_y,
+        )));
+    } else {
+        let _ = window.center();
+    }
+}
+
 fn show_startup_splash(app: &tauri::AppHandle, theme: &str) -> Result<(), String> {
     if app.get_webview_window("startup_splash").is_some() {
         return Ok(());
@@ -729,7 +752,7 @@ fn show_startup_splash(app: &tauri::AppHandle, theme: &str) -> Result<(), String
 
     let _ = splash.set_background_color(Some(startup_splash_window_background()));
     let _ = splash.set_theme(startup_theme_window_theme(theme));
-    let _ = splash.center();
+    position_window_centered(app, &splash, splash_width, splash_height);
     let _ = splash.show();
     Ok(())
 }

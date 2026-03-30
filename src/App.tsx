@@ -1,10 +1,8 @@
-﻿import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+﻿import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { availableMonitors, getCurrentWindow, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { message, open, save } from "@tauri-apps/plugin-dialog";
-import Editor, { loader, type OnMount } from "@monaco-editor/react";
-import * as monacoApi from "monaco-editor";
 import type * as Monaco from "monaco-editor";
 import { useTranslation } from "react-i18next";
 import {
@@ -41,7 +39,6 @@ import {
   Shrink,
 } from "lucide-react";
 import "./App.css";
-import { Viewer3D } from "./components/Viewer3D";
 import { splitCodeLines, toLoadedProgramState } from "./lib/loadedProgram";
 import { enterImmersivePanes, exitImmersivePanes, toggleImmersiveDrawer } from "./lib/immersiveViewer";
 import { resolveImmersiveSidebarLeft } from "./lib/immersiveSidebar";
@@ -67,9 +64,6 @@ import { getShortcutGroups } from "./lib/shortcutGroups";
 import type { CameraState, FrameState, LoadedProgramState, NcFileItem, NcMode, ParseResult, Vec3 } from "./types";
 import { parseNcToFrames } from "./lib/ncPath";
 
-// Force local Monaco runtime (no CDN), critical for offline/Linux package environments.
-loader.config({ monaco: monacoApi });
-
 type ThemeMode = "system" | "light" | "navy" | "xdark";
 type SpeedMode = "Low" | "Standard" | "High";
 type InteractionMode = "pan" | "rotate";
@@ -81,6 +75,14 @@ type ActiveTooltip = {
   text: string;
   rect: DOMRect;
   mode: TooltipMode;
+};
+
+type NcEditorProps = {
+  path: string;
+  theme: string;
+  value: string;
+  onMount: (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => void;
+  onChange: (value: string | undefined) => void;
 };
 
 const speedPointsPerSecond: Record<SpeedMode, number> = {
@@ -404,6 +406,8 @@ function App() {
   );
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
+  const lazyEditorLoadRef = useRef<Promise<{ default: ComponentType<NcEditorProps> }> | null>(null);
+  const lazyViewerLoadRef = useRef<Promise<{ Viewer3D: ComponentType<any> }> | null>(null);
   const viewMenuRef = useRef<HTMLDetailsElement | null>(null);
   const topChromeRef = useRef<HTMLDivElement | null>(null);
   const saveCurrentFileRef = useRef<(() => Promise<boolean>) | null>(null);
@@ -530,6 +534,8 @@ function App() {
   const [recordingShortcutId, setRecordingShortcutId] = useState<ShortcutId | null>(null);
   const [editorReady, setEditorReady] = useState(false);
   const [fallbackEditor, setFallbackEditor] = useState(false);
+  const [NcEditorComponent, setNcEditorComponent] = useState<ComponentType<NcEditorProps> | null>(null);
+  const [Viewer3DComponent, setViewer3DComponent] = useState<ComponentType<any> | null>(null);
   const [shortcuts, setShortcuts] = useState<ShortcutMap>(() => {
     const raw = localStorage.getItem(STORAGE_SHORTCUTS_KEY);
     if (!raw) return defaultShortcuts;
@@ -559,6 +565,35 @@ function App() {
   const currentLocale = i18n.resolvedLanguage === "zh-CN" || i18n.language === "zh-CN" ? "zh-CN" : "en-US";
   const hasUnsavedChanges = Boolean(loadedProgram) && code !== lastSavedContent;
   const visiblePaneCount = [showFiles, showEditor, showViewer].filter(Boolean).length;
+  useEffect(() => {
+    if (!showEditor || fallbackEditor || NcEditorComponent) return;
+    if (!lazyEditorLoadRef.current) {
+      lazyEditorLoadRef.current = import("./components/NcEditor");
+    }
+    void lazyEditorLoadRef.current
+      .then((module) => {
+        setNcEditorComponent(() => module.default);
+      })
+      .catch(() => {
+        setFallbackEditor(true);
+        setStatus((prev) => `${prev} | Monaco loading failed, switched to fallback editor`);
+      });
+  }, [NcEditorComponent, fallbackEditor, showEditor]);
+
+  useEffect(() => {
+    if (!showViewer || Viewer3DComponent) return;
+    if (!lazyViewerLoadRef.current) {
+      lazyViewerLoadRef.current = import("./components/Viewer3D");
+    }
+    void lazyViewerLoadRef.current
+      .then((module) => {
+        setViewer3DComponent(() => module.Viewer3D);
+      })
+      .catch(() => {
+        setStatus((prev) => `${prev} | 3D viewer loading failed`);
+      });
+  }, [Viewer3DComponent, showViewer]);
+
   const speedOptions: Array<{ value: SpeedMode; label: string }> = [
     { value: "Low", label: t("speedLow") },
     { value: "Standard", label: t("speedStandard") },
@@ -1285,7 +1320,7 @@ function App() {
     };
   }, []);
 
-  const onEditorMount: OnMount = (editor, monaco) => {
+  const onEditorMount = (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
     setEditorReady(true);
     setFallbackEditor(false);
     monacoRef.current = monaco;
@@ -2379,33 +2414,16 @@ function App() {
               </span>
             </h3>
             <div ref={editorHostRef} className="editor-host">
-              {!fallbackEditor ? (
-                <Editor
+              {!fallbackEditor && NcEditorComponent ? (
+                <NcEditorComponent
                   path={activeFile || loadedProgram?.filePath || "fnc://editor/current.nc"}
-                  width="100%"
-                  height="100%"
-                  language="ncgcode"
                   theme={resolvedTheme === "light" ? "nc-light" : (resolvedTheme === "navy" ? "nc-dark" : "nc-x-dark")}
                   value={code}
                   onMount={onEditorMount}
                   onChange={(v) => setCode(v ?? "")}
-                  options={{
-                    minimap: { enabled: false },
-                    fontSize: 13,
-                    folding: true,
-                    glyphMargin: true,
-                    smoothScrolling: true,
-                    lineNumbers: "on",
-                    automaticLayout: true,
-                    wordWrap: "off",
-                    scrollbar: {
-                      horizontal: "auto",
-                      horizontalScrollbarSize: 10,
-                      alwaysConsumeMouseWheel: false,
-                    },
-                    scrollBeyondLastColumn: 4,
-                  }}
                 />
+              ) : !fallbackEditor ? (
+                <div className="editor-loading-shell" aria-label="Loading editor" />
               ) : (
                 <textarea
                   style={{
@@ -2459,30 +2477,34 @@ function App() {
                 </span>
               </button>
             </div>
-            <Viewer3D
-              frames={frames}
-              codeLines={codeLines}
-              currentFrame={currentFrame}
-              hoverFrame={hoverFrame}
-              cameraState={cameraState}
-              theme={resolvedTheme}
-              interactionMode={interactionMode}
-              showGrid={showGrid}
-              showOrientationGizmo={showOrientationGizmo}
-              showRapidPath={showRapidPath}
-              showPathTooltip={showPathTooltip}
-              refocusNonce={refocusNonce}
-              zoomRequestNonce={viewerZoomRequest.nonce}
-              zoomRequestScale={viewerZoomRequest.scale}
-              onRefocusApplied={handleViewerRefocusApplied}
-              onRequestNamedView={handleViewerRequestNamedView}
-              onViewerHotkeyScopeChange={setViewerHotkeyScope}
-              fitOnResize={false}
-              onCameraStateChange={handleViewerCameraStateChange}
-              onFrameHover={handleViewerFrameHover}
-              onFrameHoverEnd={handleViewerFrameHoverEnd}
-              onFramePick={handleViewerFramePick}
-            />
+            {Viewer3DComponent ? (
+              <Viewer3DComponent
+                frames={frames}
+                codeLines={codeLines}
+                currentFrame={currentFrame}
+                hoverFrame={hoverFrame}
+                cameraState={cameraState}
+                theme={resolvedTheme}
+                interactionMode={interactionMode}
+                showGrid={showGrid}
+                showOrientationGizmo={showOrientationGizmo}
+                showRapidPath={showRapidPath}
+                showPathTooltip={showPathTooltip}
+                refocusNonce={refocusNonce}
+                zoomRequestNonce={viewerZoomRequest.nonce}
+                zoomRequestScale={viewerZoomRequest.scale}
+                onRefocusApplied={handleViewerRefocusApplied}
+                onRequestNamedView={handleViewerRequestNamedView}
+                onViewerHotkeyScopeChange={setViewerHotkeyScope}
+                fitOnResize={false}
+                onCameraStateChange={handleViewerCameraStateChange}
+                onFrameHover={handleViewerFrameHover}
+                onFrameHoverEnd={handleViewerFrameHoverEnd}
+                onFramePick={handleViewerFramePick}
+              />
+            ) : (
+              <div className="viewer-loading-shell" aria-label="Loading 3D viewer" />
+            )}
             <div className="viewer-meta">
               <div className="viewer-legend" title={legendTooltipText}>
                 <span className="legend-item"><b>{t("legendLineNo")}:</b> {currentFrame?.lineNumber ?? "-"}</span>

@@ -1,26 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./index.css";
 import "./i18n";
 import App from "./App";
-import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { applyThemePaletteToDom, getBootThemePalette, resolveBootTheme } from "./lib/themeBoot";
-
-declare global {
-  interface Window {
-    MonacoEnvironment?: {
-      getWorker?: (moduleId: string, label: string) => Worker;
-    };
-  }
-}
-
-// Explicit worker wiring for Tauri/WebKit (Ubuntu 22.04+) to avoid Monaco infinite loading.
-window.MonacoEnvironment = {
-  getWorker(_moduleId: string, _label: string) {
-    return new EditorWorker({ name: "monaco-editor-worker" });
-  },
-};
 
 const storedThemeMode = (() => {
   try {
@@ -42,8 +25,15 @@ applyThemePaletteToDom(document, resolvedBootTheme, bootPalette);
 
 if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
   const tauriTheme = resolvedBootTheme === "light" ? "light" : "dark";
-  void getCurrentWindow().setBackgroundColor(bootPalette.background).catch(() => {});
-  void getCurrentWindow().setTheme(tauriTheme).catch(() => {});
+  void import("@tauri-apps/api/window")
+    .then(({ getCurrentWindow }) => {
+      const currentWindow = getCurrentWindow();
+      return Promise.allSettled([
+        currentWindow.setBackgroundColor(bootPalette.background),
+        currentWindow.setTheme(tauriTheme),
+      ]);
+    })
+    .catch(() => {});
 }
 
 const hideBootSplash = () => {

@@ -787,6 +787,24 @@ label { font-size: 13px; color: var(--muted); display: inline-flex; align-items:
   overflow: hidden;
 }
 
+.editor-loading-shell {
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.1), rgba(15, 23, 42, 0.04)), var(--panel);
+  border: 1px solid var(--panel-border);
+}
+
+.viewer-loading-shell {
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 30% 24%, rgba(56, 189, 248, 0.08) 0%, transparent 32%),
+    linear-gradient(180deg, color-mix(in oklab, var(--panel) 92%, transparent), color-mix(in oklab, var(--bg) 22%, var(--panel)));
+  border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
+}
+
 .panel h3 {
   margin: 0;
   padding: 7px 10px;
