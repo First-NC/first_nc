@@ -11,11 +11,6 @@ on:
 
 jobs:
   build:
-    env:
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -59,14 +54,24 @@ jobs:
         run: npm ci
 
       - name: Prepare Apple API key
-        if: matrix.package_script == 'package:mac' && env.APPLE_API_KEY != ''
+        if: matrix.package_script == 'package:mac' && secrets.APPLE_API_KEY != ''
         run: |
-          printf '%s' "$APPLE_API_KEY" > "$RUNNER_TEMP/AuthKey.p8"
+          printf '%s' "${{ secrets.APPLE_API_KEY }}" > "$RUNNER_TEMP/AuthKey.p8"
 
       - name: Build bundles
         env:
-          APPLE_API_KEY_PATH: ${{ matrix.package_script == 'package:mac' && env.APPLE_API_KEY != '' && format('{0}/AuthKey.p8', runner.temp) || '' }}
-        run: npm run ${{ matrix.package_script }}
+          RAW_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          RAW_APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          RAW_APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          RAW_APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ matrix.package_script == 'package:mac' && secrets.APPLE_API_KEY != '' && format('{0}/AuthKey.p8', runner.temp) || '' }}
+        run: |
+          if [ "${{ matrix.package_script }}" = "package:mac" ] && [ -n "$RAW_APPLE_CERTIFICATE" ] && [ -n "$RAW_APPLE_CERTIFICATE_PASSWORD" ] && [ -n "$RAW_APPLE_API_ISSUER" ] && [ -n "$RAW_APPLE_API_KEY" ]; then
+            export APPLE_CERTIFICATE="$RAW_APPLE_CERTIFICATE"
+            export APPLE_CERTIFICATE_PASSWORD="$RAW_APPLE_CERTIFICATE_PASSWORD"
+            export APPLE_API_ISSUER="$RAW_APPLE_API_ISSUER"
+          fi
+          npm run ${{ matrix.package_script }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
