@@ -53,6 +53,13 @@ const hideBootSplash = () => {
   window.setTimeout(() => splash.remove(), 220);
 };
 
+const notifyStartupPainted = () => {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+  void import("@tauri-apps/api/core")
+    .then(({ invoke }) => invoke("notify_startup_painted"))
+    .catch(() => {});
+};
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />
@@ -62,15 +69,8 @@ createRoot(document.getElementById("root")!).render(
 if (typeof window !== "undefined") {
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => {
+      notifyStartupPainted();
       hideBootSplash();
     });
   });
-}
-
-if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-  window.setTimeout(() => {
-    void import("@tauri-apps/api/core")
-      .then(({ invoke }) => invoke("notify_startup_ready"))
-      .catch(() => {});
-  }, 0);
 }

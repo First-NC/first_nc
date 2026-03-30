@@ -266,19 +266,10 @@ fn notify_startup_ready(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    if state.startup_revealed.swap(true, Ordering::SeqCst) {
+    if state.startup_revealed.load(Ordering::SeqCst) {
         return Ok(());
     }
-
-    let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window unavailable".to_string())?;
-    window
-        .show()
-        .map_err(|e| format!("failed to show main window: {e}"))?;
-    let _ = window.set_focus();
-
-    Ok(())
+    reveal_main_window(&app, &state)
 }
 
 #[tauri::command]
@@ -286,12 +277,12 @@ fn notify_startup_boot_ready(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    if state.startup_painted.swap(true, Ordering::SeqCst) {
-        return Ok(());
-    }
-
     if let Some(splash) = app.get_webview_window("startup_splash") {
         let _ = splash.close();
+    }
+
+    if !state.startup_revealed.load(Ordering::SeqCst) {
+        reveal_main_window(&app, &state)?;
     }
 
     Ok(())
@@ -711,22 +702,8 @@ fn show_startup_splash(app: &tauri::AppHandle, theme: &str) -> Result<(), String
     if app.get_webview_window("startup_splash").is_some() {
         return Ok(());
     }
-
-    let main_window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window unavailable".to_string())?;
-
-    let outer_size = main_window
-        .outer_size()
-        .map_err(|e| format!("failed to read main window size: {e}"))?;
-    let outer_position = main_window
-        .outer_position()
-        .map_err(|e| format!("failed to read main window position: {e}"))?;
-
-    let splash_width = outer_size.width.min(760);
-    let splash_height = outer_size.height.min(500);
-    let splash_x = outer_position.x + ((outer_size.width.saturating_sub(splash_width)) / 2) as i32;
-    let splash_y = outer_position.y + ((outer_size.height.saturating_sub(splash_height)) / 2) as i32;
+    let splash_width = 760.0;
+    let splash_height = 500.0;
 
     let splash = WebviewWindowBuilder::new(
         app,
@@ -743,9 +720,8 @@ fn show_startup_splash(app: &tauri::AppHandle, theme: &str) -> Result<(), String
     .transparent(true)
     .shadow(false)
     .always_on_top(true)
-    .visible(true)
-    .position(splash_x as f64, splash_y as f64)
-    .inner_size(splash_width as f64, splash_height as f64)
+    .visible(false)
+    .inner_size(splash_width, splash_height)
     .background_color(startup_splash_window_background())
     .theme(startup_theme_window_theme(theme))
     .build()
@@ -753,6 +729,26 @@ fn show_startup_splash(app: &tauri::AppHandle, theme: &str) -> Result<(), String
 
     let _ = splash.set_background_color(Some(startup_splash_window_background()));
     let _ = splash.set_theme(startup_theme_window_theme(theme));
+    let _ = splash.center();
+    let _ = splash.show();
+    Ok(())
+}
+
+fn reveal_main_window(
+    app: &tauri::AppHandle,
+    state: &tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    if state.startup_revealed.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window unavailable".to_string())?;
+    window
+        .show()
+        .map_err(|e| format!("failed to show main window: {e}"))?;
+    let _ = window.set_focus();
     Ok(())
 }
 
