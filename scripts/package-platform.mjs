@@ -9,6 +9,11 @@ const BUILD_PLANS = {
     bundles: "appimage,deb",
     hostPlatforms: ["linux"],
   },
+  "linux:ci": {
+    target: "x86_64-unknown-linux-gnu",
+    bundles: "deb",
+    hostPlatforms: ["linux"],
+  },
   mac: {
     target: "aarch64-apple-darwin",
     bundles: "app,dmg",
@@ -40,9 +45,15 @@ export function resolveBuildPlan(name) {
   };
 }
 
-export function resolveExecutionPlan(name) {
+function hasAppleSigningEnv(env) {
+  return Boolean(env.APPLE_CERTIFICATE);
+}
+
+export function resolveExecutionPlan(name, env = process.env) {
   const plan = resolveBuildPlan(name);
-  const createPlainDmg = name === "mac" || name === "mac:intel";
+  const isMacTarget = name === "mac" || name === "mac:intel";
+  const useNativeMacBundler = isMacTarget && hasAppleSigningEnv(env);
+  const createPlainDmg = isMacTarget && !useNativeMacBundler;
   return {
     ...plan,
     tauriBundles: createPlainDmg ? "app" : plan.bundles,
@@ -182,7 +193,7 @@ async function createPlainMacDmg(repoRoot, target) {
 
 async function runBuild(name) {
   assertHostPlatform(name);
-  const { target, tauriBundles, createPlainDmg } = resolveExecutionPlan(name);
+  const { target, tauriBundles, createPlainDmg } = resolveExecutionPlan(name, process.env);
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const repoRoot = path.resolve(scriptDir, "..");
   const tauriCli = path.join(repoRoot, "node_modules", "@tauri-apps", "cli", "tauri.js");

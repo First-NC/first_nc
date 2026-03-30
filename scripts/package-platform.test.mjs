@@ -40,18 +40,30 @@ test("unknown package alias throws a clear error", () => {
 });
 
 test("mac uses app-only Tauri bundling and manual DMG creation", () => {
-  const plan = resolveExecutionPlan("mac");
+  const plan = resolveExecutionPlan("mac", {});
   assert.equal(plan.tauriBundles, "app");
   assert.equal(plan.createPlainDmg, true);
 });
 
 test("linux keeps Tauri-managed bundle generation", () => {
-  const plan = resolveExecutionPlan("linux");
+  const plan = resolveExecutionPlan("linux", {});
   assert.equal(plan.tauriBundles, "appimage,deb");
   assert.equal(plan.createPlainDmg, false);
+});
+
+test("linux:ci resolves to Ubuntu x64 DEB-only bundles", () => {
+  const plan = resolveExecutionPlan("linux:ci", {});
+  assert.equal(plan.target, "x86_64-unknown-linux-gnu");
+  assert.equal(plan.tauriBundles, "deb");
 });
 
 test("linux packaging env enables extracted AppImage execution", () => {
   const env = buildEnvForPlatform({ PATH: "/usr/bin", HOME: "/tmp/home" }, "linux");
   assert.equal(env.APPIMAGE_EXTRACT_AND_RUN, "1");
+});
+
+test("mac uses Tauri native dmg bundling when Apple signing env is present", () => {
+  const plan = resolveExecutionPlan("mac", { APPLE_CERTIFICATE: "set" });
+  assert.equal(plan.tauriBundles, "app,dmg");
+  assert.equal(plan.createPlainDmg, false);
 });

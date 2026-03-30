@@ -11,4 +11,4 @@ docker run --rm \
   -v "${REPO_ROOT}:/work" \
   -w /work \
   "${IMAGE}" \
-  bash -lc "npm ci && npm run package:linux"
+  bash -lc "npm ci && npm run package:linux:ci"

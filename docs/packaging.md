@@ -82,6 +82,11 @@ npm run package:linux
 - `src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage`
 - `src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb`
 
+说明：
+
+- 本地 `package:linux` 仍然产出 `AppImage + DEB`
+- GitHub Actions 为了稳定发布 Ubuntu 22.04+ 兼容包，Linux CI 只上传 `DEB`
+
 ### 4.2 macOS Apple Silicon
 
 在 Apple Silicon Mac 上执行：
@@ -148,6 +153,7 @@ npm run package:win
 
 - `windows-latest` -> `npm run package:win`
 - `ubuntu-22.04` -> `npm run package:linux:docker`
+  实际容器内执行 `npm run package:linux:ci`
 - `macos-14` -> `npm run package:mac`
 
 上传的 artifact 名称：
@@ -162,6 +168,15 @@ npm run package:win
 - GitHub Actions 只负责选择 runner、安装依赖、上传产物
 - 具体 Tauri target 与 bundle 参数只在一处定义，即 [`scripts/package-platform.mjs`](/Users/reddyfan/code/FNC/scripts/package-platform.mjs)
 - Linux CI 构建固定使用 [`docker/linux-builder-jammy.Dockerfile`](/Users/reddyfan/code/FNC/docker/linux-builder-jammy.Dockerfile)，确保 Ubuntu 22.04 及以上兼容基线
+- Linux CI 目前只上传 `DEB`，避免 `AppImage/linuxdeploy` 链路拖垮整条发布流程
+- macOS CI 发布要求配置 Apple 签名与公证 secrets；未配置时工作流会直接失败，而不是产出一个被 Gatekeeper 判为损坏的安装包
+
+macOS CI 需要的 secrets：
+
+- `APPLE_CERTIFICATE`
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_API_ISSUER`
+- `APPLE_API_KEY`
 
 ## 7. Ubuntu Docker 构建
 

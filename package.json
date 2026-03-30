@@ -14,6 +14,7 @@
     "tauri:build:mac:intel": "node ./scripts/package-platform.mjs mac:intel",
     "tauri:build:mac:arm": "node ./scripts/package-platform.mjs mac",
     "package:linux": "node ./scripts/package-platform.mjs linux",
+    "package:linux:ci": "node ./scripts/package-platform.mjs linux:ci",
     "package:linux:docker": "bash ./scripts/package-linux-docker.sh",
     "package:mac": "node ./scripts/package-platform.mjs mac",
     "package:mac:intel": "node ./scripts/package-platform.mjs mac:intel",
