@@ -41,16 +41,18 @@ test("buildViewerSceneData derives stable scene metadata from frames and code li
   assert.equal(scene.sceneScale, 80);
 });
 
-test("buildViewerRenderBuffers does not change cut buffers when only rapid visibility changes", () => {
-  const frames: FrameState[] = [
-    makeFrame(0, 1, [0, 0, 0], "Linear"),
-    makeFrame(1, 2, [10, 0, 0], "Linear"),
-    makeFrame(2, 3, [10, 5, 0], "Rapid"),
-  ];
+test("buildViewerRenderBuffers stays stable while dragging even when adaptive limits apply", () => {
+  const frames: FrameState[] = [makeFrame(0, 1, [0, 0, 0], "Linear")];
+  for (let i = 1; i <= 5000; i += 1) {
+    frames.push(makeFrame(i, i + 1, [i * 10, 0, 0], i === 5000 ? "Rapid" : "Linear"));
+  }
 
-  const scene = buildViewerSceneData(frames, ["G1 X0", "G1 X10", "G0 Y5"]);
-  const compact = buildViewerRenderBuffers(scene.segmentData, false, (base) => base);
-  const pointerDown = buildViewerRenderBuffers(scene.segmentData, true, (base) => base);
+  const scene = buildViewerSceneData(
+    frames,
+    Array.from({ length: frames.length }, (_, idx) => (idx === frames.length - 1 ? "G0 X50000" : `G1 X${idx * 10}`)),
+  );
+  const compact = buildViewerRenderBuffers(scene.segmentData, (base, floor = 0) => Math.max(floor, Math.floor(base / 10_000) + 1));
+  const pointerDown = buildViewerRenderBuffers(scene.segmentData, (base, floor = 0) => Math.max(floor, Math.floor(base / 10_000) + 1));
 
   assert.deepEqual(compact.cutPoints, pointerDown.cutPoints);
   assert.deepEqual(compact.uvwPoints, pointerDown.uvwPoints);

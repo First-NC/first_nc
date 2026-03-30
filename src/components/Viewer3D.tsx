@@ -689,8 +689,8 @@ function Viewer3DInner({
     [scaledCount, segmentData, showRapidPath],
   );
   const renderBuffers = useMemo(
-    () => buildViewerRenderBuffers(segmentData, isPointerDown, scaledCount),
-    [isPointerDown, scaledCount, segmentData],
+    () => buildViewerRenderBuffers(segmentData, scaledCount),
+    [scaledCount, segmentData],
   );
   const renderCutPoints = renderBuffers.cutPoints;
   const renderPlungePoints = renderBuffers.plungePoints;

@@ -117,22 +117,21 @@ export function buildViewerPickCollections(
 
 export function buildViewerRenderBuffers(
   segmentData: ViewerSegmentData,
-  isPointerDown: boolean,
   scaledCount: (base: number, floor?: number) => number,
 ): ViewerRenderBuffers {
   return {
     cutPoints: buildLinePointBuffer(
       segmentData.cutRenderSegments,
-      isPointerDown ? scaledCount(9000, 1800) : scaledCount(28000, 3200),
+      scaledCount(28000, 3200),
     ),
     plungePoints: buildLinePointBuffer(segmentData.plungeRenderSegments),
     uvwPoints: buildLinePointBuffer(
       segmentData.uvwRenderSegments,
-      isPointerDown ? scaledCount(7000, 1400) : scaledCount(22000, 2800),
+      scaledCount(22000, 2800),
     ),
     rapidPoints: buildLinePointBuffer(
       segmentData.rapidRenderSegments,
-      isPointerDown ? scaledCount(6000, 1000) : scaledCount(18000, 2400),
+      scaledCount(18000, 2400),
     ),
   };
 }
