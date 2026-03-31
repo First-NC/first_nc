@@ -18,6 +18,11 @@ test("main startup path does not statically import monaco editor runtime", () =>
     false,
     "main.tsx should not eagerly import App on startup",
   );
+  assert.equal(
+    /notify_startup_ready/.test(mainSource),
+    true,
+    "main.tsx should reveal the hidden main window as soon as the startup shell is ready",
+  );
 });
 
 test("App shell does not statically import Monaco runtime modules", () => {

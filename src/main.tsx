@@ -49,6 +49,13 @@ const notifyStartupPainted = () => {
     .catch(() => {});
 };
 
+const notifyStartupReady = () => {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+  void import("@tauri-apps/api/core")
+    .then(({ invoke }) => invoke("notify_startup_ready"))
+    .catch(() => {});
+};
+
 const rootElement = document.getElementById("root");
 
 if (!rootElement) {
@@ -57,6 +64,12 @@ if (!rootElement) {
 
 const root = createRoot(rootElement);
 let startupSettled = false;
+
+if (typeof window !== "undefined") {
+  window.setTimeout(() => {
+    notifyStartupReady();
+  }, 0);
+}
 
 const releaseStartupOverlay = () => {
   if (typeof window === "undefined") return;
