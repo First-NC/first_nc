@@ -1,8 +1,4 @@
 ﻿import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { availableMonitors, getCurrentWindow, PhysicalPosition, PhysicalSize } from "@tauri-apps/api/window";
-import { listen } from "@tauri-apps/api/event";
-import { message, open, save } from "@tauri-apps/plugin-dialog";
 import type * as Monaco from "monaco-editor";
 import { useTranslation } from "react-i18next";
 import {
@@ -242,6 +238,40 @@ function frameForLine(frames: FrameState[], lineNumber: number): FrameState | nu
 
 function inTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+type TauriWindowModule = typeof import("@tauri-apps/api/window");
+type TauriCoreModule = typeof import("@tauri-apps/api/core");
+type TauriEventModule = typeof import("@tauri-apps/api/event");
+type TauriDialogModule = typeof import("@tauri-apps/plugin-dialog");
+
+let tauriWindowModulePromise: Promise<TauriWindowModule> | null = null;
+let tauriCoreModulePromise: Promise<TauriCoreModule> | null = null;
+let tauriEventModulePromise: Promise<TauriEventModule> | null = null;
+let tauriDialogModulePromise: Promise<TauriDialogModule> | null = null;
+
+function loadTauriWindowModule(): Promise<TauriWindowModule> {
+  tauriWindowModulePromise ??= import("@tauri-apps/api/window");
+  return tauriWindowModulePromise;
+}
+
+function loadTauriCoreModule(): Promise<TauriCoreModule> {
+  tauriCoreModulePromise ??= import("@tauri-apps/api/core");
+  return tauriCoreModulePromise;
+}
+
+function loadTauriEventModule(): Promise<TauriEventModule> {
+  tauriEventModulePromise ??= import("@tauri-apps/api/event");
+  return tauriEventModulePromise;
+}
+
+function loadTauriDialogModule(): Promise<TauriDialogModule> {
+  tauriDialogModulePromise ??= import("@tauri-apps/plugin-dialog");
+  return tauriDialogModulePromise;
+}
+
+function invokeTauri<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  return loadTauriCoreModule().then(({ invoke }) => invoke<T>(command, args));
 }
 
 function detectNcMode(content: string): NcMode {
@@ -787,9 +817,16 @@ function App() {
     applyThemePaletteToDom(document, resolvedTheme, palette);
     if (inTauriRuntime()) {
       const tauriTheme = resolvedTheme === "light" ? "light" : "dark";
-      void invoke("set_startup_appearance", { appearance: { resolvedTheme } }).catch(() => {});
-      void getCurrentWindow().setBackgroundColor(palette.background).catch(() => {});
-      void getCurrentWindow().setTheme(tauriTheme).catch(() => {});
+      void invokeTauri("set_startup_appearance", { appearance: { resolvedTheme } }).catch(() => {});
+      void loadTauriWindowModule()
+        .then(({ getCurrentWindow }) => {
+          const appWindow = getCurrentWindow();
+          return Promise.all([
+            appWindow.setBackgroundColor(palette.background).catch(() => {}),
+            appWindow.setTheme(tauriTheme).catch(() => {}),
+          ]);
+        })
+        .catch(() => {});
     }
   }, [resolvedTheme]);
   useEffect(() => {
@@ -870,77 +907,86 @@ function App() {
   }, [recentFiles, selectedFilePath]);
   useEffect(() => {
     if (!inTauriRuntime()) return;
-    const appWindow = getCurrentWindow();
     let disposed = false;
     let unlistenMoved: (() => void) | undefined;
     let unlistenResized: (() => void) | undefined;
 
-    const persistWindowState = async () => {
-      if (disposed || !workspaceWindowHydratedRef.current) return;
+    void (async () => {
       try {
-        const [position, size, maximized] = await Promise.all([
-          appWindow.outerPosition(),
-          appWindow.outerSize(),
-          appWindow.isMaximized(),
-        ]);
-        localStorage.setItem(
-          STORAGE_WINDOW_STATE_KEY,
-          JSON.stringify({
-            x: Math.round(position.x),
-            y: Math.round(position.y),
-            width: Math.round(size.width),
-            height: Math.round(size.height),
-            maximized,
-          }),
-        );
-      } catch {
-      }
-    };
+        const { availableMonitors, getCurrentWindow, PhysicalPosition, PhysicalSize } = await loadTauriWindowModule();
+        if (disposed) return;
+        const appWindow = getCurrentWindow();
 
-    const restoreWindowState = async () => {
-      const raw = localStorage.getItem(STORAGE_WINDOW_STATE_KEY);
-      let saved = null;
-      if (raw) {
-        try {
-          saved = sanitizeStoredWorkspaceWindowState(JSON.parse(raw));
-        } catch {
-          saved = null;
-        }
-      }
-      try {
-        if (saved) {
-          const monitors = (await availableMonitors()).map((monitor) => ({
-            x: monitor.workArea.position.x,
-            y: monitor.workArea.position.y,
-            width: monitor.workArea.size.width,
-            height: monitor.workArea.size.height,
-          }));
-          const next = clampWorkspaceWindowState(saved, monitors);
-          const isCurrentlyMaximized = await appWindow.isMaximized();
-          if (isCurrentlyMaximized) {
-            await appWindow.unmaximize();
+        const persistWindowState = async () => {
+          if (disposed || !workspaceWindowHydratedRef.current) return;
+          try {
+            const [position, size, maximized] = await Promise.all([
+              appWindow.outerPosition(),
+              appWindow.outerSize(),
+              appWindow.isMaximized(),
+            ]);
+            localStorage.setItem(
+              STORAGE_WINDOW_STATE_KEY,
+              JSON.stringify({
+                x: Math.round(position.x),
+                y: Math.round(position.y),
+                width: Math.round(size.width),
+                height: Math.round(size.height),
+                maximized,
+              }),
+            );
+          } catch {
           }
-          await appWindow.setSize(new PhysicalSize(next.width, next.height));
-          await appWindow.setPosition(new PhysicalPosition(next.x, next.y));
-          if (next.maximized) {
-            await appWindow.maximize();
+        };
+
+        const restoreWindowState = async () => {
+          const raw = localStorage.getItem(STORAGE_WINDOW_STATE_KEY);
+          let saved = null;
+          if (raw) {
+            try {
+              saved = sanitizeStoredWorkspaceWindowState(JSON.parse(raw));
+            } catch {
+              saved = null;
+            }
           }
-        }
+          try {
+            if (saved) {
+              const monitors = (await availableMonitors()).map((monitor) => ({
+                x: monitor.workArea.position.x,
+                y: monitor.workArea.position.y,
+                width: monitor.workArea.size.width,
+                height: monitor.workArea.size.height,
+              }));
+              const next = clampWorkspaceWindowState(saved, monitors);
+              const isCurrentlyMaximized = await appWindow.isMaximized();
+              if (isCurrentlyMaximized) {
+                await appWindow.unmaximize();
+              }
+              await appWindow.setSize(new PhysicalSize(next.width, next.height));
+              await appWindow.setPosition(new PhysicalPosition(next.x, next.y));
+              if (next.maximized) {
+                await appWindow.maximize();
+              }
+            }
+          } catch {
+          } finally {
+            workspaceWindowHydratedRef.current = true;
+            void persistWindowState();
+          }
+        };
+
+        await restoreWindowState();
+        if (disposed) return;
+        unlistenMoved = await appWindow.onMoved(() => {
+          void persistWindowState();
+        });
+        unlistenResized = await appWindow.onResized(() => {
+          void persistWindowState();
+        });
       } catch {
-      } finally {
         workspaceWindowHydratedRef.current = true;
-        void persistWindowState();
       }
-    };
-
-    void restoreWindowState().then(async () => {
-      unlistenMoved = await appWindow.onMoved(() => {
-        void persistWindowState();
-      });
-      unlistenResized = await appWindow.onResized(() => {
-        void persistWindowState();
-      });
-    });
+    })();
 
     return () => {
       disposed = true;
@@ -1108,7 +1154,7 @@ function App() {
   }, [t, updatePlayProgress]);
 
   const loadNcFile = useCallback(async (path: string) => {
-    const result = await invoke<ParseResult>("open_nc_file", { path });
+    const result = await invokeTauri<ParseResult>("open_nc_file", { path });
     setActiveFile(path);
     setSelectedFilePath(path);
     applyLoadedProgram(result);
@@ -1117,7 +1163,7 @@ function App() {
 
   const loadNcFileWithFolderContext = useCallback(async (filePath: string) => {
     const dir = dirname(filePath);
-    const files = await invoke<NcFileItem[]>("list_nc_files_in_folder", { folderPath: dir });
+    const files = await invokeTauri<NcFileItem[]>("list_nc_files_in_folder", { folderPath: dir });
     setFolderPath(dir);
     setFilesInFolder(files);
     await loadNcFile(filePath);
@@ -1134,6 +1180,7 @@ function App() {
   }, [activeFile, loadNcFile, loadNcFileWithFolderContext]);
 
   const openNcFileByDialog = async () => {
+    const { open } = await loadTauriDialogModule();
     const selected = await open({
       multiple: false,
       directory: false,
@@ -1154,13 +1201,14 @@ function App() {
     }
     void (async () => {
       try {
+        const { listen } = await loadTauriEventModule();
         unlistenLaunch = await listen<string>("launch-nc-file", async (event) => {
           const launchPath = event.payload;
           if (!launchPath) return;
           await loadNcFileWithFolderContext(launchPath);
         });
 
-        const pendingLaunches = await invoke<string[]>("take_pending_launch_nc_files");
+        const pendingLaunches = await invokeTauri<string[]>("take_pending_launch_nc_files");
         for (const launchPath of pendingLaunches) {
           if (!launchPath) continue;
           await loadNcFileWithFolderContext(launchPath);
@@ -1805,7 +1853,7 @@ function App() {
   }, [displayShortcut, recordingShortcutId, shortcutConflicts, shortcutItemMap, shortcuts, t]);
 
   const saveToPath = useCallback(async (path: string) => {
-    await invoke("export_nc_file", {
+    await invokeTauri("export_nc_file", {
       path,
       content: code,
       exportOptions: { encoding: "Utf8", lineEnding: "CrLf" },
@@ -1813,7 +1861,7 @@ function App() {
     setActiveFile(path);
     setLastSavedContent(code);
     const dir = dirname(path);
-    const files = await invoke<NcFileItem[]>("list_nc_files_in_folder", { folderPath: dir });
+    const files = await invokeTauri<NcFileItem[]>("list_nc_files_in_folder", { folderPath: dir });
     setFolderPath(dir);
     setFilesInFolder(files);
     setStatus(t("saved"));
@@ -1821,6 +1869,7 @@ function App() {
   }, [code, t]);
 
   const saveAsCurrentFile = useCallback(async () => {
+    const { save } = await loadTauriDialogModule();
     const targetPath = await save({
       filters: [{ name: "NC Files", extensions: ["nc", "anc"] }],
       defaultPath: activeFile || "program.nc",
@@ -1967,38 +2016,47 @@ function App() {
 
   useEffect(() => {
     if (!inTauriRuntime()) return;
-    const appWindow = getCurrentWindow();
     let unlisten: (() => void) | null = null;
-    void appWindow.onCloseRequested(async (event) => {
-      if (allowWindowCloseRef.current) {
-        allowWindowCloseRef.current = false;
-        return;
-      }
-      if (!hasUnsavedChanges) return;
-      event.preventDefault();
-      const saveLabel = t("save");
-      const discardLabel = t("discardChanges");
-      const cancelLabel = t("cancel");
-      const choice = await message(t("exitUnsavedPrompt"), {
-        title: t("unsavedTitle"),
-        kind: "warning",
-        buttons: { yes: saveLabel, no: discardLabel, cancel: cancelLabel },
-      });
-      if (choice === saveLabel) {
-        const saved = await saveCurrentFile();
-        if (saved) {
-          allowWindowCloseRef.current = true;
-          await appWindow.close();
-        }
-        return;
-      }
-      if (choice === discardLabel) {
-        allowWindowCloseRef.current = true;
-        await appWindow.close();
-      }
-    }).then((fn) => {
-      unlisten = fn;
-    });
+    let disposed = false;
+    void loadTauriWindowModule()
+      .then(({ getCurrentWindow }) => {
+        if (disposed) return null;
+        const appWindow = getCurrentWindow();
+        return appWindow.onCloseRequested(async (event) => {
+          if (allowWindowCloseRef.current) {
+            allowWindowCloseRef.current = false;
+            return;
+          }
+          if (!hasUnsavedChanges) return;
+          event.preventDefault();
+          const { message } = await loadTauriDialogModule();
+          const saveLabel = t("save");
+          const discardLabel = t("discardChanges");
+          const cancelLabel = t("cancel");
+          const choice = await message(t("exitUnsavedPrompt"), {
+            title: t("unsavedTitle"),
+            kind: "warning",
+            buttons: { yes: saveLabel, no: discardLabel, cancel: cancelLabel },
+          });
+          if (choice === saveLabel) {
+            const saved = await saveCurrentFile();
+            if (saved) {
+              allowWindowCloseRef.current = true;
+              await appWindow.close();
+            }
+            return;
+          }
+          if (choice === discardLabel) {
+            allowWindowCloseRef.current = true;
+            await appWindow.close();
+          }
+        });
+      })
+      .then((fn) => {
+        if (disposed || !fn) return;
+        unlisten = fn;
+      })
+      .catch(() => {});
 
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!hasUnsavedChanges) return;
@@ -2007,6 +2065,7 @@ function App() {
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => {
+      disposed = true;
       if (unlisten) unlisten();
       window.removeEventListener("beforeunload", onBeforeUnload);
     };
@@ -2022,7 +2081,7 @@ function App() {
     if (locale === currentLocale) return;
     await i18n.changeLanguage(locale);
     localStorage.setItem(STORAGE_LANG_KEY, locale);
-    await invoke("set_locale", { locale });
+    await invokeTauri("set_locale", { locale });
   };
   const showImmersiveFilesPane = immersiveViewer || showFiles;
   const showImmersiveEditorPane = immersiveViewer || showEditor;

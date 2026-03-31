@@ -13,6 +13,11 @@ test("main startup path does not statically import monaco editor runtime", () =>
     false,
     "main.tsx should not eagerly import the Monaco worker on startup",
   );
+  assert.equal(
+    /import App from "\.\/App";/.test(mainSource),
+    false,
+    "main.tsx should not eagerly import App on startup",
+  );
 });
 
 test("App shell does not statically import Monaco runtime modules", () => {
@@ -37,5 +42,25 @@ test("App shell does not statically import Monaco runtime modules", () => {
     /from "\.\/components\/Viewer3D"/.test(appSource),
     false,
     "App.tsx should not eagerly import the 3D viewer runtime",
+  );
+  assert.equal(
+    /from "@tauri-apps\/api\/window"/.test(appSource),
+    false,
+    "App.tsx should not eagerly import @tauri-apps/api/window",
+  );
+  assert.equal(
+    /from "@tauri-apps\/api\/core"/.test(appSource),
+    false,
+    "App.tsx should not eagerly import @tauri-apps/api/core",
+  );
+  assert.equal(
+    /from "@tauri-apps\/api\/event"/.test(appSource),
+    false,
+    "App.tsx should not eagerly import @tauri-apps/api/event",
+  );
+  assert.equal(
+    /from "@tauri-apps\/plugin-dialog"/.test(appSource),
+    false,
+    "App.tsx should not eagerly import @tauri-apps/plugin-dialog",
   );
 });
