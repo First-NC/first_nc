@@ -42,6 +42,7 @@ import { clampPaneWidth } from "./lib/paneWidths";
 import { getViewerSourceSignature, shouldClearTransientViewerState } from "./lib/viewerPlaybackState";
 import { applyThemePaletteToDom, getBootThemePalette, resolveBootTheme } from "./lib/themeBoot";
 import { getStartupMaskConfig } from "./lib/startupMask";
+import { shouldShowStartupMaskOnPlatform } from "./lib/startupPlatform";
 import { resolveRestoredFrameIndex, sanitizeStoredWorkspaceSession, type StoredWorkspaceSession } from "./lib/workspaceSession";
 import { clampWorkspaceWindowState, sanitizeStoredWorkspaceWindowState } from "./lib/workspaceState";
 import { sanitizeToolbarPrefs } from "./lib/toolbarPrefs";
@@ -559,7 +560,10 @@ function App() {
   const [status, setStatus] = useState(t("ready"));
   const [showShortcutModal, setShowShortcutModal] = useState(false);
   const [activeTooltip, setActiveTooltip] = useState<ActiveTooltip | null>(null);
-  const [startupMaskVisible, setStartupMaskVisible] = useState(() => "__TAURI_INTERNALS__" in window);
+  const [startupMaskVisible, setStartupMaskVisible] = useState(() => (
+    "__TAURI_INTERNALS__" in window
+    && shouldShowStartupMaskOnPlatform(typeof navigator !== "undefined" ? navigator.platform : "")
+  ));
   const [tooltipPosition, setTooltipPosition] = useState({ left: 0, top: 0, visible: false });
   const [recordingShortcutId, setRecordingShortcutId] = useState<ShortcutId | null>(null);
   const [editorReady, setEditorReady] = useState(false);
