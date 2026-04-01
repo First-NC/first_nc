@@ -757,10 +757,6 @@ fn show_startup_splash(app: &tauri::AppHandle, theme: &str) -> Result<(), String
     Ok(())
 }
 
-fn should_use_startup_splash() -> bool {
-    !cfg!(target_os = "linux")
-}
-
 fn reveal_main_window(
     app: &tauri::AppHandle,
     state: &tauri::State<'_, AppState>,
@@ -1089,18 +1085,13 @@ pub fn run() {
             }
             app.handle().plugin(tauri_plugin_dialog::init())?;
             apply_adaptive_window_size(app);
-            let state = app.state::<AppState>();
             if let Some(main_window) = app.get_webview_window("main") {
                 let appearance = read_startup_appearance(app.handle()).unwrap_or(StartupAppearance {
                     resolved_theme: "light".to_string(),
                 });
                 let _ = main_window.set_background_color(Some(startup_theme_background(&appearance.resolved_theme)));
                 let _ = main_window.set_theme(startup_theme_window_theme(&appearance.resolved_theme));
-                if should_use_startup_splash() {
-                    show_startup_splash(app.handle(), &appearance.resolved_theme)?;
-                } else {
-                    reveal_main_window(app.handle(), &state)?;
-                }
+                show_startup_splash(app.handle(), &appearance.resolved_theme)?;
             }
             Ok(())
         })

@@ -42,7 +42,6 @@ import { clampPaneWidth } from "./lib/paneWidths";
 import { getViewerSourceSignature, shouldClearTransientViewerState } from "./lib/viewerPlaybackState";
 import { applyThemePaletteToDom, getBootThemePalette, resolveBootTheme } from "./lib/themeBoot";
 import { getStartupMaskConfig } from "./lib/startupMask";
-import { shouldShowStartupMaskOnPlatform } from "./lib/startupPlatform";
 import { resolveRestoredFrameIndex, sanitizeStoredWorkspaceSession, type StoredWorkspaceSession } from "./lib/workspaceSession";
 import { clampWorkspaceWindowState, sanitizeStoredWorkspaceWindowState } from "./lib/workspaceState";
 import { sanitizeToolbarPrefs } from "./lib/toolbarPrefs";
@@ -239,6 +238,12 @@ function frameForLine(frames: FrameState[], lineNumber: number): FrameState | nu
 
 function inTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+function getSystemDarkPreference(): boolean {
+  return typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
 type TauriWindowModule = typeof import("@tauri-apps/api/window");
@@ -560,10 +565,7 @@ function App() {
   const [status, setStatus] = useState(t("ready"));
   const [showShortcutModal, setShowShortcutModal] = useState(false);
   const [activeTooltip, setActiveTooltip] = useState<ActiveTooltip | null>(null);
-  const [startupMaskVisible, setStartupMaskVisible] = useState(() => (
-    "__TAURI_INTERNALS__" in window
-    && shouldShowStartupMaskOnPlatform(typeof navigator !== "undefined" ? navigator.platform : "")
-  ));
+  const [startupMaskVisible, setStartupMaskVisible] = useState(() => "__TAURI_INTERNALS__" in window);
   const [tooltipPosition, setTooltipPosition] = useState({ left: 0, top: 0, visible: false });
   const [recordingShortcutId, setRecordingShortcutId] = useState<ShortcutId | null>(null);
   const [editorReady, setEditorReady] = useState(false);
@@ -588,7 +590,7 @@ function App() {
     return "system";
   });
   const [ncMode, setNcMode] = useState<NcMode>("normal");
-  const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const [systemDark, setSystemDark] = useState(() => getSystemDarkPreference());
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const dragState = useRef<{ pane: "files" | "editor"; startX: number; startWidth: number } | null>(null);
   const immersiveFilesPaneRef = useRef<HTMLElement | null>(null);
@@ -1029,10 +1031,17 @@ function App() {
   }, [editorReady, fallbackEditor]);
 
   useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
+    const onChange = (e: MediaQueryListEvent | MediaQueryList) => setSystemDark(e.matches);
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", onChange);
+      return () => media.removeEventListener("change", onChange);
+    }
+    if (typeof media.addListener === "function") {
+      media.addListener(onChange);
+      return () => media.removeListener(onChange);
+    }
   }, []);
 
   useEffect(() => {
@@ -1451,11 +1460,12 @@ function App() {
     if (!editorReady) return;
     const host = editorHostRef.current;
     if (!host) return;
+    syncMonacoFindWidgetLayout();
+    if (typeof ResizeObserver !== "function") return;
     const observer = new ResizeObserver(() => {
       syncMonacoFindWidgetLayout();
     });
     observer.observe(host);
-    syncMonacoFindWidgetLayout();
     return () => observer.disconnect();
   }, [editorReady, syncMonacoFindWidgetLayout]);
 
@@ -2188,10 +2198,15 @@ function App() {
       }
     };
     updateMeasuredWidths();
+    window.addEventListener("resize", updateMeasuredWidths);
+    if (typeof ResizeObserver !== "function") {
+      return () => {
+        window.removeEventListener("resize", updateMeasuredWidths);
+      };
+    }
     const observer = new ResizeObserver(() => updateMeasuredWidths());
     if (immersiveFilesPaneRef.current) observer.observe(immersiveFilesPaneRef.current);
     if (immersiveEditorPaneRef.current) observer.observe(immersiveEditorPaneRef.current);
-    window.addEventListener("resize", updateMeasuredWidths);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", updateMeasuredWidths);
