@@ -15,8 +15,23 @@ test("main startup path does not statically import monaco editor runtime", () =>
   );
   assert.equal(
     /import App from "\.\/App";/.test(mainSource),
+    true,
+    "main.tsx should eagerly import App so older Linux WebKit runtimes do not depend on startup chunk loading",
+  );
+  assert.equal(
+    /import\("@tauri-apps\/api\/core"\)/.test(mainSource),
     false,
-    "main.tsx should not eagerly import App on startup",
+    "main.tsx should not rely on dynamically importing @tauri-apps/api/core before the hidden main window is revealed",
+  );
+  assert.match(
+    mainSource,
+    /__TAURI_INTERNALS__/,
+    "main.tsx should use Tauri internals directly for the earliest startup handshake",
+  );
+  assert.equal(
+    /import\("\.\/App"\)/.test(mainSource),
+    false,
+    "main.tsx should not lazy-load App during the startup handshake",
   );
   assert.equal(
     /notify_startup_ready/.test(mainSource),

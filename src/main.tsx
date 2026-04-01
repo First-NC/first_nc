@@ -1,5 +1,6 @@
 import { Component, StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import App from "./App";
 import "./index.css";
 import "./i18n";
 import { applyThemePaletteToDom, getBootThemePalette, resolveBootTheme } from "./lib/themeBoot";
@@ -10,6 +11,12 @@ type StartupErrorBoundaryProps = {
 
 type StartupErrorBoundaryState = {
   error: unknown;
+};
+
+type TauriInternalsWindow = Window & {
+  __TAURI_INTERNALS__?: {
+    invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
+  };
 };
 
 const storedThemeMode = (() => {
@@ -50,18 +57,20 @@ const hideBootSplash = () => {
   window.setTimeout(() => splash.remove(), 220);
 };
 
+const invokeStartupCommand = (command: string) => {
+  if (typeof window === "undefined") return;
+  const tauriWindow = window as TauriInternalsWindow;
+  const invoke = tauriWindow.__TAURI_INTERNALS__?.invoke;
+  if (typeof invoke !== "function") return;
+  void invoke(command).catch(() => {});
+};
+
 const notifyStartupPainted = () => {
-  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
-  void import("@tauri-apps/api/core")
-    .then(({ invoke }) => invoke("notify_startup_painted"))
-    .catch(() => {});
+  invokeStartupCommand("notify_startup_painted");
 };
 
 const notifyStartupReady = () => {
-  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
-  void import("@tauri-apps/api/core")
-    .then(({ invoke }) => invoke("notify_startup_ready"))
-    .catch(() => {});
+  invokeStartupCommand("notify_startup_ready");
 };
 
 const rootElement = document.getElementById("root");
@@ -182,9 +191,8 @@ const startupWatchdog = window.setTimeout(() => {
   renderStartupError(new Error("Startup timed out while loading the main interface."));
 }, 8000);
 
-void import("./App")
-  .then(({ default: App }) => {
-    if (startupSettled) return;
+try {
+  if (!startupSettled) {
     startupSettled = true;
     window.clearTimeout(startupWatchdog);
     root.render(
@@ -195,8 +203,8 @@ void import("./App")
       </StrictMode>,
     );
     releaseStartupOverlay();
-  })
-  .catch((error) => {
-    window.clearTimeout(startupWatchdog);
-    renderStartupError(error);
-  });
+  }
+} catch (error) {
+  window.clearTimeout(startupWatchdog);
+  renderStartupError(error);
+}
