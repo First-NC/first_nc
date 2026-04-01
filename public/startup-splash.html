@@ -208,6 +208,27 @@
         }
       })();
     </script>
+    <script>
+      (() => {
+        const notifyBootReady = () => {
+          try {
+            if (typeof window === "undefined") return;
+            if (!("__TAURI_INTERNALS__" in window)) return;
+            const internals = window.__TAURI_INTERNALS__;
+            if (internals && typeof internals.invoke === "function") {
+              void internals.invoke("notify_startup_boot_ready");
+            }
+          } catch {
+          }
+        };
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", notifyBootReady, { once: true });
+        } else {
+          notifyBootReady();
+        }
+      })();
+    </script>
   </head>
   <body>
     <div class="stage">
