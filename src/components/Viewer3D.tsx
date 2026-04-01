@@ -45,7 +45,6 @@ function FocusSegment({
       points={asDreiLinePoints(points)}
       color="#ff4d4f"
       lineWidth={lineWidth}
-      segments
       depthTest={false}
       renderOrder={999}
     />
@@ -564,33 +563,37 @@ const StaticPathGroup = memo(function StaticPathGroup({
   showRapidPath,
   lineColor,
 }: {
-  renderCutPoints: number[];
-  renderRapidPoints: number[];
-  renderUvwPoints: number[];
-  renderPlungePoints: number[];
+  renderCutPoints: number[][];
+  renderRapidPoints: number[][];
+  renderUvwPoints: number[][];
+  renderPlungePoints: number[][];
   showRapidPath: boolean;
   lineColor: string;
 }) {
   return (
     <group>
-      {renderCutPoints.length > 1 && <Line points={asDreiLinePoints(renderCutPoints)} color={lineColor} lineWidth={1.8} segments />}
-      {showRapidPath && renderRapidPoints.length > 1 && (
-        <Line
-          points={asDreiLinePoints(renderRapidPoints)}
-          color="#94a3b8"
-          lineWidth={1.2}
-          segments
-          dashed={renderRapidPoints.length < 7000}
-          dashScale={2.2}
-          gapSize={0.9}
-        />
-      )}
-      {renderUvwPoints.length > 1 && (
-        <Line points={asDreiLinePoints(renderUvwPoints)} color="#a855f7" lineWidth={1.8} segments />
-      )}
-      {renderPlungePoints.length > 1 && (
-        <Line points={asDreiLinePoints(renderPlungePoints)} color="#facc15" lineWidth={1.8} segments />
-      )}
+      {renderCutPoints.map((points, index) => (
+        points.length > 3 ? <Line key={`cut-${index}`} points={asDreiLinePoints(points)} color={lineColor} lineWidth={1.8} /> : null
+      ))}
+      {showRapidPath && renderRapidPoints.map((points, index) => (
+        points.length > 3 ? (
+          <Line
+            key={`rapid-${index}`}
+            points={asDreiLinePoints(points)}
+            color="#94a3b8"
+            lineWidth={1.2}
+            dashed={points.length < 7000}
+            dashScale={2.2}
+            gapSize={0.9}
+          />
+        ) : null
+      ))}
+      {renderUvwPoints.map((points, index) => (
+        points.length > 3 ? <Line key={`uvw-${index}`} points={asDreiLinePoints(points)} color="#a855f7" lineWidth={1.8} /> : null
+      ))}
+      {renderPlungePoints.map((points, index) => (
+        points.length > 3 ? <Line key={`plunge-${index}`} points={asDreiLinePoints(points)} color="#facc15" lineWidth={1.8} /> : null
+      ))}
     </group>
   );
 });

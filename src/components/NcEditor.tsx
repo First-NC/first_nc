@@ -2,6 +2,7 @@ import Editor, { loader } from "@monaco-editor/react";
 import * as monacoApi from "monaco-editor";
 import type * as Monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
+import { resolveNcEditorOptions } from "../lib/editorOptions";
 
 declare global {
   interface Window {
@@ -38,22 +39,7 @@ export default function NcEditor({ path, theme, value, onMount, onChange }: NcEd
       value={value}
       onMount={onMount}
       onChange={onChange}
-      options={{
-        minimap: { enabled: false },
-        fontSize: 13,
-        folding: true,
-        glyphMargin: true,
-        smoothScrolling: true,
-        lineNumbers: "on",
-        automaticLayout: true,
-        wordWrap: "off",
-        scrollbar: {
-          horizontal: "auto",
-          horizontalScrollbarSize: 10,
-          alwaysConsumeMouseWheel: false,
-        },
-        scrollBeyondLastColumn: 4,
-      }}
+      options={resolveNcEditorOptions()}
     />
   );
 }

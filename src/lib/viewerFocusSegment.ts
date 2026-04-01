@@ -7,13 +7,6 @@ export function resolveViewerFocusSegment(
   pickedSegment: SegmentRecord | null,
 ): Vec3[] | null {
   if (!markerFrame || frames.length < 2) return null;
-  if (
-    pickedSegment &&
-    pickedSegment.endFrame.index === markerFrame.index &&
-    pickedSegment.endFrame.lineNumber === markerFrame.lineNumber
-  ) {
-    return [pickedSegment.start, pickedSegment.end];
-  }
 
   const markerIdx = typeof markerFrame.index === "number"
     ? Math.max(0, Math.min(frames.length - 1, markerFrame.index))
@@ -28,23 +21,31 @@ export function resolveViewerFocusSegment(
     return [a, b];
   };
 
+  const line = markerFrame.lineNumber;
+  const sameLineIndices: number[] = [];
+  for (let i = 1; i < frames.length; i += 1) {
+    if (frames[i].lineNumber === line) sameLineIndices.push(i);
+  }
+  if (sameLineIndices.length > 0) {
+    const startIndex = Math.max(0, sameLineIndices[0] - 1);
+    const points: Vec3[] = [frames[startIndex].position];
+    for (const index of sameLineIndices) {
+      const previous = points[points.length - 1];
+      const current = frames[index].position;
+      const len = Math.hypot(
+        current.x - previous.x,
+        current.y - previous.y,
+        current.z - previous.z,
+      );
+      if (len >= 1e-8) {
+        points.push(current);
+      }
+    }
+    if (points.length > 1) return points;
+  }
+
   const exact = markerIdx > 0 ? makeSeg(markerIdx - 1, markerIdx) : makeSeg(0, 1);
   if (exact) return exact;
-
-  const line = markerFrame.lineNumber;
-  let bestSameLine: Vec3[] | null = null;
-  let bestScore = Number.POSITIVE_INFINITY;
-  for (let i = 1; i < frames.length; i += 1) {
-    if (frames[i].lineNumber !== line) continue;
-    const seg = makeSeg(i - 1, i);
-    if (!seg) continue;
-    const score = Math.abs(i - markerIdx);
-    if (score < bestScore) {
-      bestScore = score;
-      bestSameLine = seg;
-    }
-  }
-  if (bestSameLine) return bestSameLine;
 
   for (let d = 1; d < Math.min(60, frames.length); d += 1) {
     const left = markerIdx - d;
@@ -55,7 +56,7 @@ export function resolveViewerFocusSegment(
     if (rightSeg) return rightSeg;
   }
 
-  const fallbackLine = markerFrame.lineNumber;
+  const fallbackLine = pickedSegment?.endFrame.lineNumber ?? markerFrame.lineNumber;
   const all: Vec3[] = [];
   for (let i = 1; i < frames.length; i += 1) {
     if (frames[i].lineNumber !== fallbackLine) continue;

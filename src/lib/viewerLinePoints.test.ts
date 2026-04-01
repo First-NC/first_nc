@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildLinePointBuffer } from "./viewerLinePoints.ts";
+import { buildLinePointGroups } from "./viewerLinePoints.ts";
 import type { SegmentRecord } from "./viewerSegments.ts";
 import type { FrameState } from "../types";
 
@@ -29,21 +29,32 @@ function makeSegment(
   };
 }
 
-test("buildLinePointBuffer preserves segment order in flat xyz buffer", () => {
+test("buildLinePointGroups stitches connected segments into one continuous polyline", () => {
   const segments = [
     makeSegment(0, [0, 0, 0], [1, 1, 1]),
-    makeSegment(1, [2, 2, 2], [3, 3, 3]),
+    makeSegment(1, [1, 1, 1], [2, 2, 2]),
   ];
 
-  assert.deepEqual(buildLinePointBuffer(segments), [
+  assert.deepEqual(buildLinePointGroups(segments), [[
     0, 0, 0,
     1, 1, 1,
     2, 2, 2,
-    3, 3, 3,
+  ]]);
+});
+
+test("buildLinePointGroups splits disconnected segments into separate polylines", () => {
+  const segments = [
+    makeSegment(0, [0, 0, 0], [1, 0, 0]),
+    makeSegment(1, [3, 0, 0], [4, 0, 0]),
+  ];
+
+  assert.deepEqual(buildLinePointGroups(segments), [
+    [0, 0, 0, 1, 0, 0],
+    [3, 0, 0, 4, 0, 0],
   ]);
 });
 
-test("buildLinePointBuffer samples by stride and always keeps the last segment", () => {
+test("buildLinePointGroups downsamples connected paths without splitting the polyline", () => {
   const segments = [
     makeSegment(0, [0, 0, 0], [1, 0, 0]),
     makeSegment(1, [1, 0, 0], [2, 0, 0]),
@@ -52,12 +63,9 @@ test("buildLinePointBuffer samples by stride and always keeps the last segment",
     makeSegment(4, [4, 0, 0], [5, 0, 0]),
   ];
 
-  assert.deepEqual(buildLinePointBuffer(segments, 2), [
+  assert.deepEqual(buildLinePointGroups(segments, 2), [[
     0, 0, 0,
-    1, 0, 0,
     3, 0, 0,
-    4, 0, 0,
-    4, 0, 0,
     5, 0, 0,
-  ]);
+  ]]);
 });

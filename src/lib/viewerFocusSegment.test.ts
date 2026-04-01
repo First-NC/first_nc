@@ -15,17 +15,28 @@ function makeFrame(index: number, lineNumber: number, x: number, y = 0, z = 0): 
   };
 }
 
-test("resolveViewerFocusSegment prefers the picked segment for the active frame", () => {
-  const frames = [makeFrame(0, 1, 0), makeFrame(1, 2, 10), makeFrame(2, 3, 20)];
+test("resolveViewerFocusSegment expands a picked arc frame to the full highlighted path for that NC line", () => {
+  const frames = [
+    makeFrame(0, 1, 0, 0, 0),
+    makeFrame(1, 2, 10, 0, 0),
+    makeFrame(2, 2, 20, 5, 0),
+    makeFrame(3, 2, 30, 10, 0),
+    makeFrame(4, 3, 40, 10, 0),
+  ];
   const picked: SegmentRecord = {
-    start: { x: 3, y: 4, z: 5 },
-    end: { x: 6, y: 7, z: 8 },
-    endFrame: frames[1],
-    sourceIndex: 0,
+    start: frames[1].position,
+    end: frames[2].position,
+    endFrame: frames[2],
+    sourceIndex: 1,
     lane: "cut",
   };
 
-  assert.deepEqual(resolveViewerFocusSegment(frames, frames[1], picked), [picked.start, picked.end]);
+  assert.deepEqual(resolveViewerFocusSegment(frames, frames[2], picked), [
+    frames[0].position,
+    frames[1].position,
+    frames[2].position,
+    frames[3].position,
+  ]);
 });
 
 test("resolveViewerFocusSegment falls back to the nearest visible segment when target is degenerate", () => {
@@ -43,15 +54,25 @@ test("resolveViewerFocusSegment falls back to the nearest visible segment when t
 });
 
 
-test("resolveViewerFocusPointBuffer flattens the active segment into the smallest render payload", () => {
-  const frames = [makeFrame(0, 1, 0), makeFrame(1, 2, 10), makeFrame(2, 3, 20)];
+test("resolveViewerFocusPointBuffer flattens the highlighted path into a continuous line payload", () => {
+  const frames = [
+    makeFrame(0, 1, 0, 0, 0),
+    makeFrame(1, 2, 10, 0, 0),
+    makeFrame(2, 2, 20, 5, 0),
+    makeFrame(3, 2, 30, 10, 0),
+  ];
   const picked: SegmentRecord = {
-    start: { x: 1, y: 2, z: 3 },
-    end: { x: 4, y: 5, z: 6 },
-    endFrame: frames[1],
-    sourceIndex: 0,
+    start: frames[1].position,
+    end: frames[2].position,
+    endFrame: frames[2],
+    sourceIndex: 1,
     lane: "cut",
   };
 
-  assert.deepEqual(resolveViewerFocusPointBuffer(frames, frames[1], picked), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(resolveViewerFocusPointBuffer(frames, frames[2], picked), [
+    0, 0, 0,
+    10, 0, 0,
+    20, 5, 0,
+    30, 10, 0,
+  ]);
 });

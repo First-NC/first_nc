@@ -1,5 +1,5 @@
 import type { FrameState, Vec3 } from "../types";
-import { buildLinePointBuffer } from "./viewerLinePoints.ts";
+import { buildLinePointGroups } from "./viewerLinePoints.ts";
 import { buildViewerSegmentData, type SegmentRecord, type ViewerSegmentData } from "./viewerSegments.ts";
 
 export type ViewerSceneData = {
@@ -17,10 +17,10 @@ export type ViewerPickCollections = {
 };
 
 export type ViewerRenderBuffers = {
-  cutPoints: number[];
-  uvwPoints: number[];
-  plungePoints: number[];
-  rapidPoints: number[];
+  cutPoints: number[][];
+  uvwPoints: number[][];
+  plungePoints: number[][];
+  rapidPoints: number[][];
 };
 
 function isFiniteNumber(v: number): boolean {
@@ -120,16 +120,13 @@ export function buildViewerRenderBuffers(
   scaledCount: (base: number, floor?: number) => number,
 ): ViewerRenderBuffers {
   return {
-    cutPoints: buildLinePointBuffer(
-      segmentData.cutRenderSegments,
-      scaledCount(28000, 3200),
-    ),
-    plungePoints: buildLinePointBuffer(segmentData.plungeRenderSegments),
-    uvwPoints: buildLinePointBuffer(
+    cutPoints: buildLinePointGroups(segmentData.cutRenderSegments),
+    plungePoints: buildLinePointGroups(segmentData.plungeRenderSegments),
+    uvwPoints: buildLinePointGroups(
       segmentData.uvwRenderSegments,
       scaledCount(22000, 2800),
     ),
-    rapidPoints: buildLinePointBuffer(
+    rapidPoints: buildLinePointGroups(
       segmentData.rapidRenderSegments,
       scaledCount(18000, 2400),
     ),

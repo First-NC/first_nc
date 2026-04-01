@@ -60,6 +60,49 @@ test("buildViewerRenderBuffers stays stable while dragging even when adaptive li
   assert.deepEqual(compact.rapidPoints, pointerDown.rapidPoints);
 });
 
+test("buildViewerRenderBuffers keeps cut paths grouped as continuous polylines", () => {
+  const frames: FrameState[] = [
+    makeFrame(0, 1, [0, 0, 0], "Linear"),
+    makeFrame(1, 2, [1, 0, 0], "ArcCw"),
+    makeFrame(2, 3, [2, 0, 0], "ArcCw"),
+    makeFrame(3, 4, [5, 0, 0], "Rapid"),
+    makeFrame(4, 5, [6, 0, 0], "Linear"),
+  ];
+
+  const scene = buildViewerSceneData(frames, ["G1 X0", "G2 X1", "G2 X2", "G0 X5", "G1 X6"]);
+  const buffers = buildViewerRenderBuffers(scene.segmentData, (base) => base);
+
+  assert.deepEqual(buffers.cutPoints, [[
+    0, 0, 0,
+    1, 0, 0,
+    2, 0, 0,
+  ], [
+    5, 0, 0,
+    6, 0, 0,
+  ]]);
+});
+
+test("buildViewerRenderBuffers does not downsample visible cut polylines", () => {
+  const frames: FrameState[] = [
+    makeFrame(0, 1, [0, 0, 0], "Linear"),
+    makeFrame(1, 2, [1, 0, 0], "Linear"),
+    makeFrame(2, 3, [2, 0, 0], "Linear"),
+    makeFrame(3, 4, [3, 0, 0], "Linear"),
+    makeFrame(4, 5, [4, 0, 0], "Linear"),
+  ];
+
+  const scene = buildViewerSceneData(frames, ["G1 X0", "G1 X1", "G1 X2", "G1 X3", "G1 X4"]);
+  const buffers = buildViewerRenderBuffers(scene.segmentData, () => 2);
+
+  assert.deepEqual(buffers.cutPoints, [[
+    0, 0, 0,
+    1, 0, 0,
+    2, 0, 0,
+    3, 0, 0,
+    4, 0, 0,
+  ]]);
+});
+
 test("buildViewerPickCollections only expands combined picks when rapid path is visible", () => {
   const frames: FrameState[] = [
     makeFrame(0, 1, [0, 0, 0], "Linear"),

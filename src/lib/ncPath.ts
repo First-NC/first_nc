@@ -15,6 +15,10 @@ interface Words {
 }
 
 const TAU = Math.PI * 2;
+const ARC_MAX_SAGITTA = 0.03;
+const ARC_MIN_SEGMENTS = 12;
+const ARC_MAX_SEGMENTS = 1024;
+const ARC_MAX_CHORD_LENGTH = 3;
 
 function cleanLine(line: string): string {
   return line.replace(/\([^)]*\)/g, "").replace(/;.*$/g, "").trim().toUpperCase();
@@ -130,6 +134,28 @@ function centerFromR(startX: number, startY: number, endX: number, endY: number,
   return d1 >= d2 ? c1 : c2;
 }
 
+function resolveArcSegmentCount(radius: number, sweep: number): number {
+  if (!Number.isFinite(radius) || radius < 1e-9 || !Number.isFinite(sweep) || sweep <= 0) {
+    return ARC_MIN_SEGMENTS;
+  }
+
+  const boundedSagitta = Math.min(ARC_MAX_SAGITTA, radius);
+  const maxAngleBySagitta = boundedSagitta >= radius
+    ? Math.PI
+    : 2 * Math.acos(Math.max(-1, Math.min(1, 1 - boundedSagitta / radius)));
+  const maxAngleByChord = 2 * Math.asin(Math.max(-1, Math.min(1, ARC_MAX_CHORD_LENGTH / (2 * radius))));
+  const maxStepAngle = Math.max(
+    0.005,
+    Math.min(
+      Math.PI / 2,
+      maxAngleBySagitta,
+      Number.isFinite(maxAngleByChord) && maxAngleByChord > 0 ? maxAngleByChord : Math.PI / 2,
+    ),
+  );
+
+  return Math.max(ARC_MIN_SEGMENTS, Math.min(ARC_MAX_SEGMENTS, Math.ceil(sweep / maxStepAngle)));
+}
+
 function appendArcFrames(
   frames: FrameState[],
   start: { x: number; y: number; z: number },
@@ -194,7 +220,7 @@ function appendArcFrames(
     sweep = TAU;
   }
 
-  const segCount = Math.max(12, Math.min(256, Math.ceil((radius * sweep) / 5)));
+  const segCount = resolveArcSegmentCount(radius, sweep);
   const dz = (end.z - start.z) / segCount;
   for (let i = 1; i <= segCount; i += 1) {
     const t = i / segCount;
