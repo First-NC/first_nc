@@ -686,10 +686,13 @@ function App() {
     { id: "pathPrev", label: t("stepPrev") },
     { id: "pathNext", label: t("stepNext") },
   ];
-  const shortcutItemMap = useMemo(
-    () => Object.fromEntries(shortcutItems.map((item) => [item.id, item.label])) as Record<ShortcutId, string>,
-    [shortcutItems],
-  );
+  const shortcutItemMap = useMemo(() => {
+    const out = {} as Record<ShortcutId, string>;
+    for (const item of shortcutItems) {
+      out[item.id] = item.label;
+    }
+    return out;
+  }, [shortcutItems]);
   const shortcutGroups = useMemo(() => {
     const descriptions = {
       file: t("shortcutGroupFileDesc"),
@@ -1449,6 +1452,7 @@ function App() {
     syncMonacoFindWidgetLayout();
     const root = editorRef.current?.getDomNode();
     if (!root) return;
+    if (typeof MutationObserver !== "function") return;
     const observer = new MutationObserver(() => {
       localizeMonacoFindWidget();
     });

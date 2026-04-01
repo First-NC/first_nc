@@ -21,3 +21,19 @@ test("App startup keeps legacy MediaQueryList listener fallback for older WebKit
   assert.match(source, /addListener/);
   assert.match(source, /removeListener/);
 });
+
+test("App startup avoids Object.fromEntries in the initial render path", () => {
+  const source = readFileSync(join(workspaceRoot, "src", "App.tsx"), "utf8");
+
+  assert.equal(
+    /Object\.fromEntries/.test(source),
+    false,
+    "App.tsx should avoid Object.fromEntries in case older Linux webviews miss it at startup",
+  );
+});
+
+test("App startup guards MutationObserver usage for older Linux webviews", () => {
+  const source = readFileSync(join(workspaceRoot, "src", "App.tsx"), "utf8");
+
+  assert.match(source, /typeof MutationObserver !== "function"/);
+});

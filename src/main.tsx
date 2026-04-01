@@ -1,8 +1,16 @@
-import { StrictMode } from "react";
+import { Component, StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import "./i18n";
 import { applyThemePaletteToDom, getBootThemePalette, resolveBootTheme } from "./lib/themeBoot";
+
+type StartupErrorBoundaryProps = {
+  children: ReactNode;
+};
+
+type StartupErrorBoundaryState = {
+  error: unknown;
+};
 
 const storedThemeMode = (() => {
   try {
@@ -81,10 +89,8 @@ const releaseStartupOverlay = () => {
   });
 };
 
-const renderStartupError = (error: unknown) => {
-  startupSettled = true;
-  console.error("Failed to bootstrap First NC Viewer", error);
-  root.render(
+function renderErrorCard(error: unknown) {
+  return (
     <div
       style={{
         minHeight: "100vh",
@@ -128,10 +134,48 @@ const renderStartupError = (error: unknown) => {
           {error instanceof Error ? `${error.name}: ${error.message}` : String(error)}
         </pre>
       </div>
-    </div>,
+    </div>
   );
+}
+
+class StartupErrorBoundary extends Component<StartupErrorBoundaryProps, StartupErrorBoundaryState> {
+  state: StartupErrorBoundaryState = {
+    error: null,
+  };
+
+  static getDerivedStateFromError(error: unknown): StartupErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("Failed to render First NC Viewer", error);
+  }
+
+  render() {
+    if (this.state.error) {
+      return renderErrorCard(this.state.error);
+    }
+    return this.props.children;
+  }
+}
+
+const renderStartupError = (error: unknown) => {
+  startupSettled = true;
+  console.error("Failed to bootstrap First NC Viewer", error);
+  root.render(renderErrorCard(error));
   releaseStartupOverlay();
 };
+
+if (typeof window !== "undefined") {
+  window.addEventListener("error", (event) => {
+    if (startupSettled) return;
+    renderStartupError(event.error ?? new Error(event.message || "Unknown startup error"));
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    if (startupSettled) return;
+    renderStartupError(event.reason ?? new Error("Unhandled startup rejection"));
+  });
+}
 
 const startupWatchdog = window.setTimeout(() => {
   if (startupSettled) return;
@@ -145,7 +189,9 @@ void import("./App")
     window.clearTimeout(startupWatchdog);
     root.render(
       <StrictMode>
-        <App />
+        <StartupErrorBoundary>
+          <App />
+        </StartupErrorBoundary>
       </StrictMode>,
     );
     releaseStartupOverlay();
