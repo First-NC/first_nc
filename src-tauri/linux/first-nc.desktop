@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=First NC
+Comment=First NC Cross-Platform
+Exec=FirstNC %F
+Icon=FirstNC
+Terminal=false
+Categories=Utility;Development;
+StartupWMClass=FirstNC
+MimeType=application/x-first-nc-nc;application/x-first-nc-anc;

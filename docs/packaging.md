@@ -1,4 +1,4 @@
-﻿# First NC Viewer 打包文档
+# First NC 打包文档
 
 本文档统一说明两类打包方式：
 
@@ -32,8 +32,7 @@ npm run package:win
 
 说明：
 
-- `macOS` 默认命令是 `npm run package:mac`，即 Apple Silicon 版本
-- 不提供误导性的“本地一次产出所有操作系统版本”命令
+- `macOS` 默认命令是 `npm run package:mac`
 - 每个命令都要求在对应操作系统主机上执行
 
 ## 3. 本地打包前准备
@@ -50,7 +49,7 @@ npm ci
 - `npm -v`
 - `cargo --version`
 
-项目打包入口在 [`package.json`](/Users/reddyfan/code/FNC/package.json)，具体分发逻辑在 [`scripts/package-platform.mjs`](/Users/reddyfan/code/FNC/scripts/package-platform.mjs)。
+项目打包入口在 [`package.json`](/Users/reddyfan/code/first_nc/package.json)，具体分发逻辑在 [`scripts/package-platform.mjs`](/Users/reddyfan/code/first_nc/scripts/package-platform.mjs)。
 
 ## 4. 本地打包
 
@@ -82,105 +81,54 @@ npm run package:linux
 - `src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage`
 - `src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb`
 
-说明：
-
-- 本地 `package:linux` 仍然产出 `AppImage + DEB`
-- GitHub Actions 为了稳定发布 Ubuntu 22.04+ 兼容包，Linux CI 只上传 `DEB`
-
 ### 4.2 macOS Apple Silicon
-
-在 Apple Silicon Mac 上执行：
 
 ```bash
 npm ci
 npm run package:mac
 ```
 
-产物目录：
-
-- `src-tauri/target/aarch64-apple-darwin/release/bundle/app`
-- `src-tauri/target/aarch64-apple-darwin/release/bundle/dmg`
-
 ### 4.3 macOS Intel
-
-在 Intel Mac 上执行：
 
 ```bash
 npm ci
 npm run package:mac:intel
 ```
 
-产物目录：
-
-- `src-tauri/target/x86_64-apple-darwin/release/bundle/app`
-- `src-tauri/target/x86_64-apple-darwin/release/bundle/dmg`
-
 ### 4.4 Windows x64
-
-在 Windows 主机上执行：
 
 ```powershell
 npm ci
 npm run package:win
 ```
 
-产物目录：
-
-- `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis`
-- `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi`
-
 ## 5. 本地打包限制
 
 - Linux 包请在 Linux 主机上打
 - macOS 包请在 macOS 主机上打
 - Windows 包请在 Windows 主机上打
-- 本仓库不把“交叉编译全部桌面安装包”作为默认工作流
 
-如果在错误的平台上执行命令，[`scripts/package-platform.mjs`](/Users/reddyfan/code/FNC/scripts/package-platform.mjs) 会直接报错并退出。
+如果在错误的平台上执行命令，[`scripts/package-platform.mjs`](/Users/reddyfan/code/first_nc/scripts/package-platform.mjs) 会直接报错并退出。
 
-## 6. GitHub Actions 一键全平台打包
+## 6. GitHub Actions 全平台打包
 
 工作流文件：
 
-- [`.github/workflows/desktop-build.yml`](/Users/reddyfan/code/FNC/.github/workflows/desktop-build.yml)
-
-触发方式：
-
-- 手动触发：`workflow_dispatch`
-- 发布触发：推送 `v*` tag
-
-矩阵内容：
-
-- `windows-latest` -> `npm run package:win`
-- `ubuntu-22.04` -> `npm run package:linux:docker`
-  实际容器内执行 `npm run package:linux:ci`
-- `macos-14` -> `npm run package:mac`
+- [`.github/workflows/desktop-build.yml`](/Users/reddyfan/code/first_nc/.github/workflows/desktop-build.yml)
 
 上传的 artifact 名称：
 
-- `fnc-windows-x64`
-- `fnc-linux-x64`
-- `fnc-macos-apple-silicon`
+- `first-nc-windows-x64`
+- `first-nc-linux-x64`
+- `first-nc-macos-apple-silicon`
 
-这套工作流的关键约束是：
+关键约束：
 
 - CI 与本地共用同一套 npm 打包入口
-- GitHub Actions 只负责选择 runner、安装依赖、上传产物
-- 具体 Tauri target 与 bundle 参数只在一处定义，即 [`scripts/package-platform.mjs`](/Users/reddyfan/code/FNC/scripts/package-platform.mjs)
-- Linux CI 构建固定使用 [`docker/linux-builder-jammy.Dockerfile`](/Users/reddyfan/code/FNC/docker/linux-builder-jammy.Dockerfile)，确保 Ubuntu 22.04 及以上兼容基线
-- Linux CI 目前只上传 `DEB`，避免 `AppImage/linuxdeploy` 链路拖垮整条发布流程
-- macOS CI 发布要求配置 Apple 签名与公证 secrets；未配置时工作流会直接失败，而不是产出一个被 Gatekeeper 判为损坏的安装包
-
-macOS CI 需要的 secrets：
-
-- `APPLE_CERTIFICATE`
-- `APPLE_CERTIFICATE_PASSWORD`
-- `APPLE_API_ISSUER`
-- `APPLE_API_KEY`
+- Tauri target 与 bundle 参数只在 [`scripts/package-platform.mjs`](/Users/reddyfan/code/first_nc/scripts/package-platform.mjs) 定义
+- Linux CI 使用 [`docker/linux-builder-jammy.Dockerfile`](/Users/reddyfan/code/first_nc/docker/linux-builder-jammy.Dockerfile)
 
 ## 7. Ubuntu Docker 构建
-
-如果当前主机不是 Linux，但你只想在本地额外产出 Ubuntu x64 包，可以继续使用仓库内 Docker 方案：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\docker\build-linux-in-docker.ps1
@@ -188,45 +136,25 @@ powershell -ExecutionPolicy Bypass -File .\docker\build-linux-in-docker.ps1
 
 对应文件：
 
-- [`docker/build-linux-in-docker.ps1`](/Users/reddyfan/code/FNC/docker/build-linux-in-docker.ps1)
-- [`docker/linux-builder.Dockerfile`](/Users/reddyfan/code/FNC/docker/linux-builder.Dockerfile)
-
-说明：
-
-- Docker 方案只覆盖 Linux 包
-- 它不是“本地全平台一键打包”
+- [`docker/build-linux-in-docker.ps1`](/Users/reddyfan/code/first_nc/docker/build-linux-in-docker.ps1)
+- [`docker/linux-builder.Dockerfile`](/Users/reddyfan/code/first_nc/docker/linux-builder.Dockerfile)
 
 ## 8. 常见问题
 
-### 8.1 macOS 能不能在 Linux 或 Windows 上直接打包？
+### 8.1 Windows 打包报文件占用错误
 
-默认不支持，也不作为本仓库标准流程。macOS 包应在 macOS 主机或 `macos` GitHub Actions runner 上构建。
+若出现类似 `failed to remove ... FirstNC.exe (os error 5)`：
 
-### 8.2 为什么没有 `package:all-supported`？
-
-因为这个名字会误导人以为单台主机能同时生成 Windows、Linux、macOS 全部安装包。实际上标准、安全的桌面打包流程应该按目标操作系统分别构建。
-
-### 8.3 Windows 打包报文件占用错误
-
-若出现类似 `failed to remove ... FirstNCViewer.exe (os error 5)`：
-
-- 先关闭正在运行的 First NC Viewer
+- 先关闭正在运行的 First NC
 - 必要时结束相关进程
 - 然后重新执行 `npm run package:win`
 
-### 8.4 Ubuntu 安装 `DEB` 时遇到系统依赖错误
-
-先修复系统包状态：
+### 8.2 Ubuntu 安装 DEB 时依赖报错
 
 ```bash
 sudo dpkg --configure -a
 sudo apt -f install
-```
-
-然后重新安装：
-
-```bash
-sudo apt install ./first-nc-viewer_0.1.0_amd64.deb
+sudo apt install ./first-nc_0.1.0_amd64.deb
 ```
 
 ## 9. 验证建议

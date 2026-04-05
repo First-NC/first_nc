@@ -733,7 +733,7 @@ fn show_startup_splash(app: &tauri::AppHandle, theme: &str) -> Result<(), String
         "startup_splash",
         WebviewUrl::App(startup_splash_path(theme).into()),
     )
-    .title("First NC Viewer")
+      .title("First NC")
     .resizable(false)
     .maximizable(false)
     .minimizable(false)
@@ -1142,7 +1142,7 @@ pub fn run() {
 
 #[cfg(target_os = "macos")]
 fn apply_macos_process_name() {
-    let process_name = NSString::from_str("First NC Viewer");
+    let process_name = NSString::from_str("First NC");
     let process_info = NSProcessInfo::processInfo();
     process_info.setProcessName(&process_name);
 }

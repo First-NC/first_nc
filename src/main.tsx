@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import "./i18n";
+import { migrateStorageNamespace, readStorageValue } from "./lib/storageKeys";
 import { applyThemePaletteToDom, getBootThemePalette, resolveBootTheme } from "./lib/themeBoot";
 
 type StartupErrorBoundaryProps = {
@@ -21,7 +22,8 @@ type TauriInternalsWindow = Window & {
 
 const storedThemeMode = (() => {
   try {
-    return localStorage.getItem("fnc.themeMode");
+    migrateStorageNamespace(localStorage);
+    return readStorageValue(localStorage, "themeMode");
   } catch {
     return null;
   }
@@ -122,7 +124,7 @@ function renderErrorCard(error: unknown) {
           boxShadow: "0 24px 60px rgba(15, 23, 42, 0.12)",
         }}
       >
-        <h1 style={{ margin: 0, fontSize: "28px", lineHeight: 1.2 }}>First NC Viewer</h1>
+        <h1 style={{ margin: 0, fontSize: "28px", lineHeight: 1.2 }}>First NC</h1>
         <p style={{ margin: "14px 0 0", color: bootPalette.muted, lineHeight: 1.6 }}>
           Application bootstrap failed before the main UI became interactive.
         </p>
@@ -157,7 +159,7 @@ class StartupErrorBoundary extends Component<StartupErrorBoundaryProps, StartupE
   }
 
   componentDidCatch(error: unknown) {
-    console.error("Failed to render First NC Viewer", error);
+    console.error("Failed to render First NC", error);
   }
 
   render() {
@@ -170,7 +172,7 @@ class StartupErrorBoundary extends Component<StartupErrorBoundaryProps, StartupE
 
 const renderStartupError = (error: unknown) => {
   startupSettled = true;
-  console.error("Failed to bootstrap First NC Viewer", error);
+  console.error("Failed to bootstrap First NC", error);
   root.render(renderErrorCard(error));
   releaseStartupOverlay();
 };

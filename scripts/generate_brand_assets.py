@@ -227,7 +227,7 @@ def main() -> None:
     monogram = extract_mark(monogram_crop)
 
     logo_art = fit_center(full_logo, (1024, 1024), inset_ratio=0.08)
-    logo_art.save(public_dir / "logo-fnc-art.png")
+logo_art.save(public_dir / "logo-first-nc.png")
     dark_logo = build_dark_logo_background(1024)
     dark_logo_shadow = Image.new("RGBA", full_logo_dark.size, (0, 0, 0, 0))
     dark_shadow_mask = full_logo_dark.getchannel("A").filter(ImageFilter.GaussianBlur(radius=9))
@@ -242,7 +242,7 @@ def main() -> None:
         dark_logo_foreground,
         ((dark_logo.width - dark_logo_foreground.width) // 2, (dark_logo.height - dark_logo_foreground.height) // 2),
     )
-    dark_logo.save(public_dir / "logo-fnc-art-dark.png")
+dark_logo.save(public_dir / "logo-first-nc-dark.png")
 
     app_icon_base = build_icon_background(1024)
     monogram_shadow = Image.new("RGBA", monogram.size, (0, 0, 0, 0))
@@ -265,7 +265,7 @@ def main() -> None:
     icons_svg = repo_root / "public" / "icons.svg"
     create_embedded_svg(favicon_png, icons_svg)
 
-    print(f"logo:{public_dir / 'logo-fnc-art.png'}")
+print(f"logo:{public_dir / 'logo-first-nc.png'}")
     print(f"icon:{app_icon_source}")
 
 

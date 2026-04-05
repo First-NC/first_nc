@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $repo = (Resolve-Path "$PSScriptRoot\..").Path
-$image = "fncviewer-linux-builder:jammy"
+$image = "first-nc-linux-builder:jammy"
 
 Write-Host "Building Docker image: $image"
 docker build -f "$PSScriptRoot\linux-builder-jammy.Dockerfile" -t $image $repo

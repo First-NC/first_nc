@@ -74,7 +74,7 @@
     <script>
       (() => {
         try {
-          const stored = localStorage.getItem("fnc.themeMode");
+          const stored = localStorage.getItem("first_nc.themeMode") ?? localStorage.getItem("fnc.themeMode");
           const normalized = stored === "dark" ? "navy" : stored;
           const systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
           const theme = normalized === "light"
@@ -112,12 +112,12 @@
         }
       })();
     </script>
-    <title>First NC Viewer</title>
+    <title>First NC</title>
   </head>
   <body>
     <div id="boot-splash" role="status" aria-live="polite">
       <div class="boot-card">
-        <div class="boot-title">First NC Viewer</div>
+        <div class="boot-title">First NC</div>
         <div class="boot-subtitle">正在启动…</div>
         <div class="boot-spinner" aria-hidden="true"></div>
       </div>

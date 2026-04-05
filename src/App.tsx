@@ -42,6 +42,7 @@ import { clampPaneWidth } from "./lib/paneWidths";
 import { getViewerSourceSignature, shouldClearTransientViewerState } from "./lib/viewerPlaybackState";
 import { applyThemePaletteToDom, getBootThemePalette, resolveBootTheme } from "./lib/themeBoot";
 import { getStartupMaskConfig } from "./lib/startupMask";
+import { migrateStorageNamespace, STORAGE_KEYS } from "./lib/storageKeys";
 import { resolveRestoredFrameIndex, sanitizeStoredWorkspaceSession, type StoredWorkspaceSession } from "./lib/workspaceSession";
 import { clampWorkspaceWindowState, sanitizeStoredWorkspaceWindowState } from "./lib/workspaceState";
 import { sanitizeToolbarPrefs } from "./lib/toolbarPrefs";
@@ -86,21 +87,26 @@ const speedPointsPerSecond: Record<SpeedMode, number> = {
   Standard: 160,
   High: 360,
 };
-const STORAGE_THEME_KEY = "fnc.themeMode";
-const STORAGE_LANG_KEY = "fnc.lang";
-const STORAGE_SHOW_FILES_KEY = "fnc.showFiles";
-const STORAGE_SHOW_EDITOR_KEY = "fnc.showEditor";
-const STORAGE_SHOW_VIEWER_KEY = "fnc.showViewer";
-const STORAGE_FILES_WIDTH_KEY = "fnc.filesWidth";
-const STORAGE_EDITOR_WIDTH_KEY = "fnc.editorWidth";
-const STORAGE_SHOW_GRID_KEY = "fnc.showGrid";
-const STORAGE_SHOW_GIZMO_KEY = "fnc.showGizmo";
-const STORAGE_RECENT_FILES_KEY = "fnc.recentFiles";
-const STORAGE_SHORTCUTS_KEY = "fnc.shortcuts";
-const STORAGE_IMMERSIVE_VIEWER_KEY = "fnc.immersiveViewer";
-const STORAGE_WINDOW_STATE_KEY = "fnc.windowState";
-const STORAGE_WORKSPACE_SESSION_KEY = "fnc.workspaceSession";
-const STORAGE_TOOLBAR_PREFS_KEY = "fnc.toolbarPrefs";
+const STORAGE_THEME_KEY = STORAGE_KEYS.themeMode;
+const STORAGE_LANG_KEY = STORAGE_KEYS.lang;
+const STORAGE_SHOW_FILES_KEY = STORAGE_KEYS.showFiles;
+const STORAGE_SHOW_EDITOR_KEY = STORAGE_KEYS.showEditor;
+const STORAGE_SHOW_VIEWER_KEY = STORAGE_KEYS.showViewer;
+const STORAGE_FILES_WIDTH_KEY = STORAGE_KEYS.filesWidth;
+const STORAGE_EDITOR_WIDTH_KEY = STORAGE_KEYS.editorWidth;
+const STORAGE_SHOW_GRID_KEY = STORAGE_KEYS.showGrid;
+const STORAGE_SHOW_GIZMO_KEY = STORAGE_KEYS.showGizmo;
+const STORAGE_RECENT_FILES_KEY = STORAGE_KEYS.recentFiles;
+const STORAGE_SHORTCUTS_KEY = STORAGE_KEYS.shortcuts;
+const STORAGE_IMMERSIVE_VIEWER_KEY = STORAGE_KEYS.immersiveViewer;
+const STORAGE_WINDOW_STATE_KEY = STORAGE_KEYS.windowState;
+const STORAGE_WORKSPACE_SESSION_KEY = STORAGE_KEYS.workspaceSession;
+const STORAGE_TOOLBAR_PREFS_KEY = STORAGE_KEYS.toolbarPrefs;
+
+try {
+  migrateStorageNamespace(localStorage);
+} catch {
+}
 
 
 function dirname(path: string): string {

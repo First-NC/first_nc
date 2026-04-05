@@ -1,15 +1,15 @@
 [package]
-name = "first-nc-viewer"
+name = "first-nc"
 version = "0.1.0"
-description = "First NC Viewer Cross-Platform"
-authors = ["First NC Viewer Team"]
+description = "First NC Cross-Platform"
+authors = ["First NC Team"]
 license = ""
 repository = ""
 edition = "2021"
 rust-version = "1.77.2"
 
 [lib]
-name = "first_nc_viewer_lib"
+name = "first_nc_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

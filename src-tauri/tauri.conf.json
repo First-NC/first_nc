@@ -1,9 +1,9 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "FirstNCViewer",
-  "mainBinaryName": "FirstNCViewer",
+  "productName": "First NC",
+  "mainBinaryName": "FirstNC",
   "version": "0.1.0",
-  "identifier": "com.fncviewer.desktop",
+  "identifier": "com.firstnc.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -14,7 +14,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "First NC Viewer",
+        "title": "First NC",
         "width": 1600,
         "height": 960,
         "minWidth": 1200,
@@ -32,14 +32,14 @@
     "active": true,
     "targets": "all",
     "macOS": {
-      "bundleName": "FirstNCViewer",
+      "bundleName": "First NC",
       "infoPlist": "Info.plist"
     },
     "linux": {
       "deb": {
-        "desktopTemplate": "linux/FNCViewer.desktop",
+        "desktopTemplate": "linux/first-nc.desktop",
         "files": {
-          "/usr/share/mime/packages/first-nc-viewer.xml": "linux/fncviewer.xml"
+          "/usr/share/mime/packages/first-nc.xml": "linux/first-nc.xml"
         },
         "postInstallScript": "linux/postinst.sh",
         "postRemoveScript": "linux/postrm.sh"
@@ -54,7 +54,7 @@
         "name": "NC Program",
         "description": "Numerical Control Program File",
         "role": "Editor",
-        "mimeType": "application/x-fncviewer-nc"
+        "mimeType": "application/x-first-nc-nc"
       }
     ],
     "icon": [
