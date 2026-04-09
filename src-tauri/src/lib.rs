@@ -869,6 +869,39 @@ fn take_pending_launch_nc_files(state: tauri::State<'_, AppState>) -> Result<Vec
     Ok(std::mem::take(&mut *lock))
 }
 
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    let parsed = url::Url::parse(&url).map_err(|e| format!("invalid url: {e}"))?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        _ => return Err("unsupported url scheme".to_string()),
+    }
+
+    #[cfg(target_os = "macos")]
+    let status = std::process::Command::new("open")
+        .arg(parsed.as_str())
+        .status()
+        .map_err(|e| format!("failed to open url: {e}"))?;
+
+    #[cfg(target_os = "windows")]
+    let status = std::process::Command::new("cmd")
+        .args(["/C", "start", "", parsed.as_str()])
+        .status()
+        .map_err(|e| format!("failed to open url: {e}"))?;
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let status = std::process::Command::new("xdg-open")
+        .arg(parsed.as_str())
+        .status()
+        .map_err(|e| format!("failed to open url: {e}"))?;
+
+    if !status.success() {
+        return Err(format!("failed to open url, exit status: {status}"));
+    }
+
+    Ok(())
+}
+
 fn normalize_launch_arg_to_file(raw: &str) -> Option<PathBuf> {
     let arg = raw.trim();
     if arg.is_empty() {
@@ -1112,7 +1145,8 @@ pub fn run() {
             set_locale,
             list_nc_files_in_folder,
             get_launch_nc_file,
-            take_pending_launch_nc_files
+            take_pending_launch_nc_files,
+            open_external_url
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -1869,6 +1869,69 @@ label { font-size: 13px; color: var(--muted); display: inline-flex; align-items:
   background: var(--btn-bg-hover);
 }
 
+.update-modal {
+  width: min(640px, calc(100vw - 40px));
+}
+
+.update-card {
+  gap: 16px;
+}
+
+.update-version-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.update-version-item {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--panel) 86%, transparent);
+}
+
+.update-version-item strong {
+  font-size: 15px;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.update-version-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.update-download-url {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in oklab, var(--btn-border) 64%, transparent);
+  background: color-mix(in oklab, var(--btn-bg) 12%, transparent);
+  color: color-mix(in oklab, var(--text) 92%, var(--muted) 8%);
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.update-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.menu-btn.primary {
+  background: color-mix(in oklab, var(--btn-border) 88%, var(--btn-bg));
+  border-color: color-mix(in oklab, var(--btn-border) 92%, white 8%);
+  color: white;
+}
+
+.menu-btn.primary:hover {
+  background: color-mix(in oklab, var(--btn-border) 96%, black 4%);
+}
+
 .current-line-highlight { background: rgba(56, 189, 248, 0.25); }
 .current-line-glyph { background: #f97316; width: 6px !important; margin-left: 3px; border-radius: 2px; }
 
@@ -1948,6 +2011,9 @@ label { font-size: 13px; color: var(--muted); display: inline-flex; align-items:
   .shortcut-chip {
     width: 100%;
     min-width: 0;
+  }
+  .update-version-grid {
+    grid-template-columns: 1fr;
   }
 
   .status-bar {

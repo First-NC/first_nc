@@ -5,6 +5,7 @@ import {
   FileUp,
   Save,
   SaveAll,
+  Download,
   Languages,
   Moon,
   Sun,
@@ -60,6 +61,7 @@ import {
 import { getShortcutGroups } from "./lib/shortcutGroups";
 import type { CameraState, FrameState, LoadedProgramState, NcFileItem, NcMode, ParseResult, Vec3 } from "./types";
 import { parseNcToFrames } from "./lib/ncPath";
+import { checkForAppUpdate, resolveCurrentAppVersion, type UpdateVersionInfo } from "./lib/updateClient";
 
 type ThemeMode = "system" | "light" | "navy" | "xdark";
 type SpeedMode = "Low" | "Standard" | "High";
@@ -72,6 +74,11 @@ type ActiveTooltip = {
   text: string;
   rect: DOMRect;
   mode: TooltipMode;
+};
+type UpdatePromptState = {
+  source: "startup" | "manual";
+  currentVersion: string;
+  latest: UpdateVersionInfo;
 };
 
 type NcEditorProps = {
@@ -469,6 +476,7 @@ function App() {
   const playProgressUiTsRef = useRef(0);
   const playProgressUiValueRef = useRef(0);
   const launchFileHandledRef = useRef(false);
+  const startupUpdateCheckHandledRef = useRef(false);
   const workspaceSessionRestoreHandledRef = useRef(false);
   const pendingWorkspaceSessionRef = useRef<StoredWorkspaceSession | null>(null);
   const allowWindowCloseRef = useRef(false);
@@ -570,6 +578,10 @@ function App() {
   const [viewerHotkeyScope, setViewerHotkeyScope] = useState(false);
   const [status, setStatus] = useState(t("ready"));
   const [showShortcutModal, setShowShortcutModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState<UpdatePromptState | null>(null);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateOpening, setUpdateOpening] = useState(false);
+  const [appVersion, setAppVersion] = useState("0.0.0");
   const [activeTooltip, setActiveTooltip] = useState<ActiveTooltip | null>(null);
   const [startupMaskVisible, setStartupMaskVisible] = useState(() => "__TAURI_INTERNALS__" in window);
   const [tooltipPosition, setTooltipPosition] = useState({ left: 0, top: 0, visible: false });
@@ -635,6 +647,14 @@ function App() {
         setStatus((prev) => `${prev} | 3D viewer loading failed`);
       });
   }, [Viewer3DComponent, showViewer]);
+
+  useEffect(() => {
+    void resolveCurrentAppVersion()
+      .then((version) => {
+        setAppVersion(version);
+      })
+      .catch(() => {});
+  }, []);
 
   const speedOptions: Array<{ value: SpeedMode; label: string }> = [
     { value: "Low", label: t("speedLow") },
@@ -749,6 +769,80 @@ function App() {
       return [item, ...deduped].slice(0, 10);
     });
   }, []);
+  const openUpdateUrl = useCallback(async (url: string) => {
+    if (!url) {
+      throw new Error(t("updateOpenFailed"));
+    }
+
+    if (inTauriRuntime()) {
+      await invokeTauri("open_external_url", { url });
+      return;
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
+  }, [t]);
+
+  const handleCheckForUpdate = useCallback(async (source: "startup" | "manual") => {
+    const timeoutMs = source === "startup" ? 5000 : 30000;
+
+    if (source === "manual") {
+      setUpdateChecking(true);
+      setStatus(t("checkingUpdate"));
+    }
+
+    try {
+      const result = await checkForAppUpdate({
+        timeoutMs,
+      });
+
+      setAppVersion(result.currentVersion);
+
+      if (result.response.update_available && result.response.latest) {
+        setShowUpdateModal({
+          source,
+          currentVersion: result.currentVersion,
+          latest: result.response.latest,
+        });
+        if (source === "manual") {
+          setStatus(t("updateAvailableStatus", { version: result.response.latest.version }));
+        }
+        return;
+      }
+
+      if (source === "manual") {
+        setStatus(t("updateNoAvailable"));
+      }
+    } catch {
+      if (source === "manual") {
+        setStatus(t("updateCheckFailed"));
+      }
+    } finally {
+      if (source === "manual") {
+        setUpdateChecking(false);
+      }
+    }
+  }, [t]);
+
+  const handleOpenUpdate = useCallback(async () => {
+    if (!showUpdateModal) return;
+
+    setUpdateOpening(true);
+    try {
+      await openUpdateUrl(showUpdateModal.latest.url);
+      setStatus(t("updateOpeningStatus", { version: showUpdateModal.latest.version }));
+      setShowUpdateModal(null);
+    } catch {
+      setStatus(t("updateOpenFailed"));
+    } finally {
+      setUpdateOpening(false);
+    }
+  }, [openUpdateUrl, showUpdateModal, t]);
+
+  useEffect(() => {
+    if (startupUpdateCheckHandledRef.current) return;
+    startupUpdateCheckHandledRef.current = true;
+    void handleCheckForUpdate("startup");
+  }, [handleCheckForUpdate]);
 
   const visibleFiles = useMemo(() => {
     const keyword = fileSearch.trim().toLowerCase();
@@ -2261,6 +2355,14 @@ function App() {
             <button className="menu-btn" data-ui-tooltip={shortcutButtonTooltip} onClick={() => setShowShortcutModal(true)}>
               <Keyboard size={14} />{t("shortcuts")}
             </button>
+            <button
+              className="menu-btn"
+              data-ui-tooltip={t("checkUpdate")}
+              onClick={() => void handleCheckForUpdate("manual")}
+              disabled={updateChecking}
+            >
+              <Download size={14} />{updateChecking ? t("checkingUpdate") : t("checkUpdate")}
+            </button>
             <div className="menu-mode-readonly">
               <Drill size={13} />
               <span>{t("mode")}:</span>
@@ -2718,6 +2820,54 @@ function App() {
                 {shortcutConflictMessage || t("shortcutInputHint")}
               </span>
               <button className="menu-btn" onClick={() => setShortcuts(defaultShortcuts)}>{t("resetDefault")}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showUpdateModal && (
+        <div className="modal-mask" onClick={() => setShowUpdateModal(null)}>
+          <div className="shortcut-modal update-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="shortcut-modal-head">
+              <div className="shortcut-modal-title">
+                <h4>{t("updateAvailableTitle")}</h4>
+                <p>{showUpdateModal.source === "startup" ? t("updateStartupDesc") : t("updateManualDesc")}</p>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowUpdateModal(null)} data-ui-tooltip={t("close")} aria-label={t("close")}>
+                <X size={14} />
+              </button>
+            </div>
+            <div className="shortcut-modal-body">
+              <div className="shortcut-card update-card">
+                <div className="update-version-grid">
+                  <div className="update-version-item">
+                    <span className="update-version-label">{t("updateCurrentVersion")}</span>
+                    <strong>{showUpdateModal.currentVersion}</strong>
+                  </div>
+                  <div className="update-version-item">
+                    <span className="update-version-label">{t("updateLatestVersion")}</span>
+                    <strong>{showUpdateModal.latest.version}</strong>
+                  </div>
+                  <div className="update-version-item">
+                    <span className="update-version-label">{t("updateChannel")}</span>
+                    <strong>{showUpdateModal.latest.os}</strong>
+                  </div>
+                  <div className="update-version-item">
+                    <span className="update-version-label">{t("appVersion")}</span>
+                    <strong>{appVersion}</strong>
+                  </div>
+                </div>
+                <div className="update-download-url" title={showUpdateModal.latest.url}>{showUpdateModal.latest.url}</div>
+              </div>
+            </div>
+            <div className="shortcut-modal-foot">
+              <span className="shortcut-modal-hint">{t("updateActionHint")}</span>
+              <div className="update-modal-actions">
+                <button className="menu-btn" onClick={() => setShowUpdateModal(null)}>{t("updateLater")}</button>
+                <button className="menu-btn primary" onClick={() => void handleOpenUpdate()} disabled={updateOpening}>
+                  {updateOpening ? t("updateOpening") : t("updateNow")}
+                </button>
+              </div>
             </div>
           </div>
         </div>

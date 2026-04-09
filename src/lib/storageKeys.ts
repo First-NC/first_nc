@@ -14,6 +14,7 @@ export const STORAGE_KEYS = {
   windowState: "first_nc.windowState",
   workspaceSession: "first_nc.workspaceSession",
   toolbarPrefs: "first_nc.toolbarPrefs",
+  updateClientId: "first_nc.updateClientId",
 } as const;
 
 export const LEGACY_STORAGE_KEYS: Record<keyof typeof STORAGE_KEYS, string> = {
@@ -32,6 +33,7 @@ export const LEGACY_STORAGE_KEYS: Record<keyof typeof STORAGE_KEYS, string> = {
   windowState: "fnc.windowState",
   workspaceSession: "fnc.workspaceSession",
   toolbarPrefs: "fnc.toolbarPrefs",
+  updateClientId: "fnc.updateClientId",
 };
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
