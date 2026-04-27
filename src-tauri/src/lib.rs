@@ -1,4 +1,6 @@
-﻿use serde::{Deserialize, Serialize};
+﻿use futures_util::StreamExt;
+use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::{
     collections::HashMap,
     fs,
@@ -13,6 +15,8 @@ use tauri::{Emitter, Manager, Size, Theme, WebviewUrl, WebviewWindowBuilder};
 
 #[cfg(target_os = "macos")]
 use objc2_foundation::{NSProcessInfo, NSString};
+
+const UPDATE_DOWNLOAD_EVENT: &str = "update-download-progress";
 
 #[derive(Default)]
 struct AppState {
@@ -229,6 +233,37 @@ struct NcFileItem {
     file_name: String,
     size_bytes: u64,
     created_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateDownloadRequest {
+    url: String,
+    version: String,
+    os: String,
+    file_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PreparedUpdatePackage {
+    path: String,
+    file_name: String,
+    version: String,
+    os: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateDownloadProgressPayload {
+    status: String,
+    version: String,
+    file_name: String,
+    downloaded_bytes: u64,
+    total_bytes: Option<u64>,
+    percent: Option<f64>,
+    path: Option<String>,
+    error: Option<String>,
 }
 
 fn read_text_auto(path: &Path) -> Result<(String, String), String> {
@@ -902,6 +937,237 @@ fn open_external_url(url: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn download_update_package(
+    request: UpdateDownloadRequest,
+    app: tauri::AppHandle,
+) -> Result<PreparedUpdatePackage, String> {
+    let parsed = url::Url::parse(&request.url).map_err(|e| format!("invalid url: {e}"))?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        _ => return Err("unsupported url scheme".to_string()),
+    }
+
+    let file_name = resolve_update_file_name(&parsed, &request);
+    let updates_dir = update_download_dir(&app)?;
+    let package_path = updates_dir.join(&file_name);
+    let temp_path = package_path.with_extension(format!(
+        "{}.part",
+        package_path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("download")
+    ));
+
+    let _ = app.emit(
+        UPDATE_DOWNLOAD_EVENT,
+        UpdateDownloadProgressPayload {
+            status: "started".to_string(),
+            version: request.version.clone(),
+            file_name: file_name.clone(),
+            downloaded_bytes: 0,
+            total_bytes: None,
+            percent: Some(0.0),
+            path: None,
+            error: None,
+        },
+    );
+
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|e| format!("failed to create update client: {e}"))?;
+    let response = client
+        .get(parsed)
+        .send()
+        .await
+        .map_err(|e| format!("failed to download update: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("update download failed with status {}", response.status()));
+    }
+
+    let total_bytes = response.content_length();
+    let mut stream = response.bytes_stream();
+    let mut downloaded_bytes = 0u64;
+    let mut file =
+        fs::File::create(&temp_path).map_err(|e| format!("failed to create update file: {e}"))?;
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("failed to stream update: {e}"))?;
+        file.write_all(&chunk)
+            .map_err(|e| format!("failed to write update file: {e}"))?;
+        downloaded_bytes += chunk.len() as u64;
+
+        let percent = total_bytes.and_then(|total| {
+            if total == 0 {
+                None
+            } else {
+                Some((downloaded_bytes as f64 / total as f64) * 100.0)
+            }
+        });
+
+        let _ = app.emit(
+            UPDATE_DOWNLOAD_EVENT,
+            UpdateDownloadProgressPayload {
+                status: "progress".to_string(),
+                version: request.version.clone(),
+                file_name: file_name.clone(),
+                downloaded_bytes,
+                total_bytes,
+                percent,
+                path: None,
+                error: None,
+            },
+        );
+    }
+
+    file.flush()
+        .map_err(|e| format!("failed to finalize update file: {e}"))?;
+    drop(file);
+    fs::rename(&temp_path, &package_path)
+        .map_err(|e| format!("failed to move update file into place: {e}"))?;
+
+    let prepared = PreparedUpdatePackage {
+        path: package_path
+            .to_str()
+            .ok_or_else(|| "invalid update file path".to_string())?
+            .to_string(),
+        file_name: file_name.clone(),
+        version: request.version.clone(),
+        os: request.os.clone(),
+    };
+
+    let _ = app.emit(
+        UPDATE_DOWNLOAD_EVENT,
+        UpdateDownloadProgressPayload {
+            status: "finished".to_string(),
+            version: request.version,
+            file_name,
+            downloaded_bytes,
+            total_bytes,
+            percent: Some(100.0),
+            path: Some(prepared.path.clone()),
+            error: None,
+        },
+    );
+
+    Ok(prepared)
+}
+
+#[tauri::command]
+fn launch_prepared_update(package_path: String, app: tauri::AppHandle) -> Result<(), String> {
+    let path = PathBuf::from(&package_path);
+    if !path.is_file() {
+        return Err("prepared update package is missing".to_string());
+    }
+
+    #[cfg(target_os = "macos")]
+    let status = std::process::Command::new("open")
+        .arg(path.as_os_str())
+        .status()
+        .map_err(|e| format!("failed to launch update package: {e}"))?;
+
+    #[cfg(target_os = "windows")]
+    let status = std::process::Command::new("cmd")
+        .args(["/C", "start", ""])
+        .arg(path.as_os_str())
+        .status()
+        .map_err(|e| format!("failed to launch update package: {e}"))?;
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let status = std::process::Command::new("xdg-open")
+        .arg(path.as_os_str())
+        .status()
+        .map_err(|e| format!("failed to launch update package: {e}"))?;
+
+    if !status.success() {
+        return Err(format!("failed to launch update package, exit status: {status}"));
+    }
+
+    app.exit(0);
+    Ok(())
+}
+
+fn resolve_update_file_name(parsed: &url::Url, request: &UpdateDownloadRequest) -> String {
+    if let Some(explicit) = request
+        .file_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return sanitize_update_file_name(explicit);
+    }
+
+    if let Some(last) = parsed
+        .path_segments()
+        .and_then(|segments| segments.filter(|segment| !segment.is_empty()).last())
+    {
+        let decoded = percent_decode_path_segment(last);
+        if has_supported_installer_extension(&decoded) {
+            return sanitize_update_file_name(&decoded);
+        }
+    }
+
+    format!("first-nc-{}.{}", request.version, infer_update_extension(&request.os))
+}
+
+fn sanitize_update_file_name(input: &str) -> String {
+    let filtered: String = input
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_'))
+        .collect();
+    if filtered.is_empty() {
+        "first-nc-update.bin".to_string()
+    } else {
+        filtered
+    }
+}
+
+fn has_supported_installer_extension(input: &str) -> bool {
+    let lower = input.to_ascii_lowercase();
+    [".msi", ".exe", ".deb", ".dmg", ".app"]
+        .iter()
+        .any(|suffix| lower.ends_with(suffix))
+}
+
+fn infer_update_extension(os: &str) -> &'static str {
+    match os.to_ascii_lowercase().as_str() {
+        "windows" => "exe",
+        "ubuntu" => "deb",
+        _ => "dmg",
+    }
+}
+
+fn percent_decode_path_segment(input: &str) -> String {
+    let mut out = String::new();
+    let bytes = input.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hi = bytes[i + 1] as char;
+            let lo = bytes[i + 2] as char;
+            if let Ok(value) = u8::from_str_radix(&format!("{hi}{lo}"), 16) {
+                out.push(value as char);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    out
+}
+
+fn update_download_dir<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to resolve app data dir: {e}"))?
+        .join("updates");
+    fs::create_dir_all(&dir).map_err(|e| format!("failed to create update dir: {e}"))?;
+    Ok(dir)
+}
+
 fn normalize_launch_arg_to_file(raw: &str) -> Option<PathBuf> {
     let arg = raw.trim();
     if arg.is_empty() {
@@ -1146,7 +1412,9 @@ pub fn run() {
             list_nc_files_in_folder,
             get_launch_nc_file,
             take_pending_launch_nc_files,
-            open_external_url
+            open_external_url,
+            download_update_package,
+            launch_prepared_update
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

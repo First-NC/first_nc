@@ -4,7 +4,6 @@ import { buildViewerSegmentData, type SegmentRecord, type ViewerSegmentData } fr
 
 export type ViewerSceneData = {
   segmentData: ViewerSegmentData;
-  centerFrames: FrameState[];
   sceneScale: number;
   geometryCenter: Vec3;
 };
@@ -12,8 +11,6 @@ export type ViewerSceneData = {
 export type ViewerPickCollections = {
   pickCutSegments: SegmentRecord[];
   pickRapidSegments: SegmentRecord[];
-  sampledSegments: SegmentRecord[];
-  fullSegments: SegmentRecord[];
 };
 
 export type ViewerRenderBuffers = {
@@ -27,22 +24,30 @@ function isFiniteNumber(v: number): boolean {
   return Number.isFinite(v);
 }
 
-function framesForCenter(frames: FrameState[]): FrameState[] {
-  if (frames.length < 2) return frames;
+function resolveCenterStartIndex(frames: FrameState[]): number {
+  if (frames.length < 2) return 0;
   const firstCut = frames.findIndex((f, i) => i > 0 && f.motion && f.motion !== "Rapid");
-  let base = firstCut > 0 ? frames.slice(Math.max(0, firstCut - 1)) : frames;
-  if (base.length < 2) base = frames;
+  let startIndex = firstCut > 0 ? Math.max(0, firstCut - 1) : 0;
+  if (frames.length - startIndex < 2) startIndex = 0;
 
-  const p0 = base[0]?.position;
+  const p0 = frames[startIndex]?.position;
   if (p0) {
     const nearOrigin = Math.hypot(p0.x, p0.y, p0.z) < 1e-6;
-    if (nearOrigin && base.length > 2) {
-      const withoutFirst = base.slice(1);
-      const hasFarPoint = withoutFirst.some((f) => Math.hypot(f.position.x, f.position.y, f.position.z) > 1);
-      if (hasFarPoint) base = withoutFirst;
+    if (nearOrigin && frames.length - startIndex > 2) {
+      let hasFarPoint = false;
+      for (let i = startIndex + 1; i < frames.length; i += 1) {
+        const { x, y, z } = frames[i].position;
+        if (Math.hypot(x, y, z) > 1) {
+          hasFarPoint = true;
+          break;
+        }
+      }
+      if (hasFarPoint) {
+        startIndex += 1;
+      }
     }
   }
-  return base;
+  return startIndex;
 }
 
 export function sampleViewerSegments(segments: SegmentRecord[], maxCount: number): SegmentRecord[] {
@@ -57,7 +62,7 @@ export function sampleViewerSegments(segments: SegmentRecord[], maxCount: number
 
 export function buildViewerSceneData(frames: FrameState[], codeLines: string[]): ViewerSceneData {
   const segmentData = buildViewerSegmentData(frames, codeLines);
-  const centerFrames = framesForCenter(frames);
+  const centerStartIndex = resolveCenterStartIndex(frames);
 
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -66,7 +71,8 @@ export function buildViewerSceneData(frames: FrameState[], codeLines: string[]):
   let maxY = Number.NEGATIVE_INFINITY;
   let maxZ = Number.NEGATIVE_INFINITY;
 
-  for (const f of centerFrames) {
+  for (let i = centerStartIndex; i < frames.length; i += 1) {
+    const f = frames[i];
     const { x, y, z } = f.position;
     minX = Math.min(minX, x);
     minY = Math.min(minY, y);
@@ -82,7 +88,6 @@ export function buildViewerSceneData(frames: FrameState[], codeLines: string[]):
   ) {
     return {
       segmentData,
-      centerFrames,
       sceneScale: 100,
       geometryCenter: { x: 0, y: 0, z: 0 },
     };
@@ -90,7 +95,6 @@ export function buildViewerSceneData(frames: FrameState[], codeLines: string[]):
 
   return {
     segmentData,
-    centerFrames,
     sceneScale: Math.max(80, Math.hypot(maxX - minX, maxY - minY, maxZ - minZ)),
     geometryCenter: {
       x: (minX + maxX) * 0.5,
@@ -102,7 +106,6 @@ export function buildViewerSceneData(frames: FrameState[], codeLines: string[]):
 
 export function buildViewerPickCollections(
   segmentData: ViewerSegmentData,
-  showRapidPath: boolean,
   scaledCount: (base: number, floor?: number) => number,
 ): ViewerPickCollections {
   const pickCutSegments = sampleViewerSegments(segmentData.cutSegments, scaledCount(9000, 1800));
@@ -110,8 +113,6 @@ export function buildViewerPickCollections(
   return {
     pickCutSegments,
     pickRapidSegments,
-    sampledSegments: showRapidPath ? [...pickCutSegments, ...pickRapidSegments] : pickCutSegments,
-    fullSegments: showRapidPath ? [...segmentData.cutSegments, ...segmentData.rapidSegments] : segmentData.cutSegments,
   };
 }
 

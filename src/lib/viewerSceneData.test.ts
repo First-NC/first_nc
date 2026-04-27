@@ -36,7 +36,7 @@ test("buildViewerSceneData derives stable scene metadata from frames and code li
 
   assert.equal(scene.segmentData.cutSegments.length, 2);
   assert.equal(scene.segmentData.rapidSegments.length, 1);
-  assert.equal(scene.centerFrames.length, 4);
+  assert.equal("centerFrames" in scene, false);
   assert.deepEqual(scene.geometryCenter, { x: 5, y: 2, z: 2.5 });
   assert.equal(scene.sceneScale, 80);
 });
@@ -111,13 +111,13 @@ test("buildViewerPickCollections only expands combined picks when rapid path is 
   ];
 
   const scene = buildViewerSceneData(frames, ["G1 X0", "G1 X5", "G0 Y5"]);
-  const hidden = buildViewerPickCollections(scene.segmentData, false, (base) => base);
-  const visible = buildViewerPickCollections(scene.segmentData, true, (base) => base);
+  const hidden = buildViewerPickCollections(scene.segmentData, (base) => base);
+  const visible = buildViewerPickCollections(scene.segmentData, (base) => base);
 
-  assert.equal(hidden.fullSegments.length, scene.segmentData.cutSegments.length);
-  assert.equal(hidden.sampledSegments.length, hidden.pickCutSegments.length);
-  assert.equal(visible.fullSegments.length, scene.segmentData.cutSegments.length + scene.segmentData.rapidSegments.length);
-  assert.equal(visible.sampledSegments.length, visible.pickCutSegments.length + visible.pickRapidSegments.length);
   assert.equal(hidden.pickCutSegments, visible.pickCutSegments);
   assert.equal(hidden.pickRapidSegments, visible.pickRapidSegments);
+  assert.equal("sampledSegments" in hidden, false);
+  assert.equal("fullSegments" in hidden, false);
+  assert.equal("sampledSegments" in visible, false);
+  assert.equal("fullSegments" in visible, false);
 });

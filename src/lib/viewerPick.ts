@@ -30,3 +30,28 @@ export function findClosestScreenSpaceSegment<T extends SegmentRecord>(
   if (!best || bestD2 > thresholdSq) return null;
   return best;
 }
+
+export function findClosestScreenSpaceSegmentInPools<T extends SegmentRecord>(
+  segmentPools: readonly (readonly T[])[],
+  mx: number,
+  my: number,
+  thresholdSq: number,
+  project: (segment: T) => ProjectedSegment,
+): T | null {
+  let best: T | null = null;
+  let bestD2 = Number.POSITIVE_INFINITY;
+
+  for (const segments of segmentPools) {
+    for (const segment of segments) {
+      const { ax, ay, bx, by } = project(segment);
+      const d2 = pointToSegmentDistanceSq2D(mx, my, ax, ay, bx, by);
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = segment;
+      }
+    }
+  }
+
+  if (!best || bestD2 > thresholdSq) return null;
+  return best;
+}

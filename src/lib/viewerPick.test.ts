@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findClosestScreenSpaceSegment } from "./viewerPick.ts";
+import { findClosestScreenSpaceSegment, findClosestScreenSpaceSegmentInPools } from "./viewerPick.ts";
 import type { SegmentRecord } from "./viewerSegments.ts";
 import type { FrameState } from "../types";
 
@@ -66,4 +66,24 @@ test("findClosestScreenSpaceSegment returns null when all segments exceed thresh
   );
 
   assert.equal(hit, null);
+});
+
+test("findClosestScreenSpaceSegmentInPools searches multiple pools without concatenating", () => {
+  const cut = Object.freeze([makeSegment(0, [0, 0], [10, 0])]);
+  const rapid = Object.freeze([makeSegment(1, [20, 0], [30, 0])]);
+
+  const hit = findClosestScreenSpaceSegmentInPools(
+    [cut, rapid],
+    24,
+    2,
+    100,
+    (segment) => ({
+      ax: segment.start.x,
+      ay: segment.start.y,
+      bx: segment.end.x,
+      by: segment.end.y,
+    }),
+  );
+
+  assert.equal(hit, rapid[0]);
 });

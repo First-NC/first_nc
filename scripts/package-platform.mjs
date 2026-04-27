@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { accessSync, constants, cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { syncVersionFromPackageJson } from "./sync-version.mjs";
 
 const BUILD_PLANS = {
   linux: {
@@ -196,6 +197,7 @@ async function runBuild(name) {
   const { target, tauriBundles, createPlainDmg } = resolveExecutionPlan(name, process.env);
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const repoRoot = path.resolve(scriptDir, "..");
+  syncVersionFromPackageJson(repoRoot);
   const tauriCli = path.join(repoRoot, "node_modules", "@tauri-apps", "cli", "tauri.js");
 
   await runCommand(

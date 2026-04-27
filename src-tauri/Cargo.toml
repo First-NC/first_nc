@@ -1,6 +1,6 @@
 [package]
 name = "first-nc"
-version = "0.1.0"
+version = "1.2.0"
 description = "First NC Cross-Platform"
 authors = ["First NC Team"]
 license = ""
@@ -23,6 +23,8 @@ tauri = { version = "2.10.3", features = ["macos-private-api"] }
 tauri-plugin-log = "2"
 encoding_rs = "0.8"
 tauri-plugin-dialog = "=2.6.0"
+reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "stream"] }
+futures-util = "0.3.32"
 url = "2.5"
 
 [target.'cfg(target_os = "macos")'.dependencies]

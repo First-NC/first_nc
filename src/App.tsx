@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+﻿import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type * as Monaco from "monaco-editor";
 import { useTranslation } from "react-i18next";
 import {
@@ -62,6 +62,13 @@ import { getShortcutGroups } from "./lib/shortcutGroups";
 import type { CameraState, FrameState, LoadedProgramState, NcFileItem, NcMode, ParseResult, Vec3 } from "./types";
 import { parseNcToFrames } from "./lib/ncPath";
 import { checkForAppUpdate, resolveCurrentAppVersion, type UpdateVersionInfo } from "./lib/updateClient";
+import {
+  buildUpdateDownloadLabel,
+  deriveUpdateFileName,
+  resolveUpdateStatusTone,
+  type UpdateOverlayPhase,
+} from "./lib/updatePresentation";
+import { HELP_MENU_ACTION_ORDER, UTILITY_MENU_CONTROL_ORDER } from "./lib/topMenu";
 
 type ThemeMode = "system" | "light" | "navy" | "xdark";
 type SpeedMode = "Low" | "Standard" | "High";
@@ -79,6 +86,24 @@ type UpdatePromptState = {
   source: "startup" | "manual";
   currentVersion: string;
   latest: UpdateVersionInfo;
+};
+
+type PreparedUpdatePackage = {
+  path: string;
+  fileName: string;
+  version: string;
+  os: string;
+};
+
+type UpdateDownloadEventPayload = {
+  status: "started" | "progress" | "finished" | "failed";
+  version: string;
+  fileName: string;
+  downloadedBytes: number;
+  totalBytes: number | null;
+  percent: number | null;
+  path?: string | null;
+  error?: string | null;
 };
 
 type NcEditorProps = {
@@ -458,6 +483,7 @@ function App() {
   const lazyEditorLoadRef = useRef<Promise<{ default: ComponentType<NcEditorProps> }> | null>(null);
   const lazyViewerLoadRef = useRef<Promise<{ Viewer3D: ComponentType<any> }> | null>(null);
   const viewMenuRef = useRef<HTMLDetailsElement | null>(null);
+  const helpMenuRef = useRef<HTMLDivElement | null>(null);
   const topChromeRef = useRef<HTMLDivElement | null>(null);
   const saveCurrentFileRef = useRef<(() => Promise<boolean>) | null>(null);
   const saveAsCurrentFileRef = useRef<(() => Promise<boolean>) | null>(null);
@@ -578,9 +604,30 @@ function App() {
   const [viewerHotkeyScope, setViewerHotkeyScope] = useState(false);
   const [status, setStatus] = useState(t("ready"));
   const [showShortcutModal, setShowShortcutModal] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
+  const [isHelpMenuOpen, setIsHelpMenuOpen] = useState(false);
+  const [updateCandidate, setUpdateCandidate] = useState<UpdatePromptState | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState<UpdatePromptState | null>(null);
   const [updateChecking, setUpdateChecking] = useState(false);
-  const [updateOpening, setUpdateOpening] = useState(false);
+  const [updateInstalling, setUpdateInstalling] = useState(false);
+  const [updateOverlayVisible, setUpdateOverlayVisible] = useState(false);
+  const [updateOverlayPhase, setUpdateOverlayPhase] = useState<UpdateOverlayPhase>("idle");
+  const [preparedUpdate, setPreparedUpdate] = useState<PreparedUpdatePackage | null>(null);
+  const [updateDownloadInfo, setUpdateDownloadInfo] = useState<{
+    version: string;
+    fileName: string;
+    downloadedBytes: number;
+    totalBytes: number | null;
+    percent: number | null;
+    error: string | null;
+  }>({
+    version: "",
+    fileName: "",
+    downloadedBytes: 0,
+    totalBytes: null,
+    percent: null,
+    error: null,
+  });
   const [appVersion, setAppVersion] = useState("0.0.0");
   const [activeTooltip, setActiveTooltip] = useState<ActiveTooltip | null>(null);
   const [startupMaskVisible, setStartupMaskVisible] = useState(() => "__TAURI_INTERNALS__" in window);
@@ -769,19 +816,6 @@ function App() {
       return [item, ...deduped].slice(0, 10);
     });
   }, []);
-  const openUpdateUrl = useCallback(async (url: string) => {
-    if (!url) {
-      throw new Error(t("updateOpenFailed"));
-    }
-
-    if (inTauriRuntime()) {
-      await invokeTauri("open_external_url", { url });
-      return;
-    }
-
-    window.open(url, "_blank", "noopener,noreferrer");
-  }, [t]);
-
   const handleCheckForUpdate = useCallback(async (source: "startup" | "manual") => {
     const timeoutMs = source === "startup" ? 5000 : 30000;
 
@@ -798,11 +832,13 @@ function App() {
       setAppVersion(result.currentVersion);
 
       if (result.response.update_available && result.response.latest) {
-        setShowUpdateModal({
+        const prompt = {
           source,
           currentVersion: result.currentVersion,
           latest: result.response.latest,
-        });
+        };
+        setUpdateCandidate(prompt);
+        setShowUpdateModal(prompt);
         if (source === "manual") {
           setStatus(t("updateAvailableStatus", { version: result.response.latest.version }));
         }
@@ -810,6 +846,10 @@ function App() {
       }
 
       if (source === "manual") {
+        if (!preparedUpdate) {
+          setUpdateCandidate(null);
+          setShowUpdateModal(null);
+        }
         setStatus(t("updateNoAvailable"));
       }
     } catch {
@@ -821,28 +861,131 @@ function App() {
         setUpdateChecking(false);
       }
     }
+  }, [preparedUpdate, t]);
+
+  const startUpdateDownload = useCallback(async (prompt: UpdatePromptState) => {
+    if (!inTauriRuntime()) {
+      setStatus(t("updateUnsupportedRuntime"));
+      return;
+    }
+
+    const fileName = deriveUpdateFileName(prompt.latest.url, prompt.latest.version, prompt.latest.os);
+    setUpdateOverlayVisible(true);
+    setUpdateOverlayPhase("downloading");
+    setPreparedUpdate(null);
+    setUpdateDownloadInfo({
+      version: prompt.latest.version,
+      fileName,
+      downloadedBytes: 0,
+      totalBytes: null,
+      percent: 0,
+      error: null,
+    });
+    setShowUpdateModal(null);
+    setStatus(t("updateDownloadStatus", { version: prompt.latest.version, progress: "0%" }));
+
+    try {
+      const prepared = await invokeTauri<PreparedUpdatePackage>("download_update_package", {
+        request: {
+          url: prompt.latest.url,
+          version: prompt.latest.version,
+          os: prompt.latest.os,
+          fileName,
+        },
+      });
+      setPreparedUpdate(prepared);
+      setUpdateOverlayPhase("ready");
+      setStatus(t("updateReadyStatus", { version: prompt.latest.version }));
+    } catch {
+      setUpdateOverlayPhase("failed");
+      setUpdateDownloadInfo((prev) => ({
+        ...prev,
+        error: t("updateDownloadFailed"),
+      }));
+      setStatus(t("updateDownloadFailed"));
+    }
   }, [t]);
 
-  const handleOpenUpdate = useCallback(async () => {
-    if (!showUpdateModal) return;
-
-    setUpdateOpening(true);
+  const handleLaunchPreparedUpdate = useCallback(async () => {
+    if (!preparedUpdate) return;
+    setUpdateInstalling(true);
     try {
-      await openUpdateUrl(showUpdateModal.latest.url);
-      setStatus(t("updateOpeningStatus", { version: showUpdateModal.latest.version }));
-      setShowUpdateModal(null);
+      setStatus(t("updateRestartingStatus", { version: preparedUpdate.version }));
+      await invokeTauri("launch_prepared_update", { packagePath: preparedUpdate.path });
     } catch {
-      setStatus(t("updateOpenFailed"));
-    } finally {
-      setUpdateOpening(false);
+      setUpdateInstalling(false);
+      setUpdateOverlayPhase("failed");
+      setUpdateDownloadInfo((prev) => ({
+        ...prev,
+        error: t("updateLaunchFailed"),
+      }));
+      setStatus(t("updateLaunchFailed"));
     }
-  }, [openUpdateUrl, showUpdateModal, t]);
+  }, [preparedUpdate, t]);
 
   useEffect(() => {
     if (startupUpdateCheckHandledRef.current) return;
     startupUpdateCheckHandledRef.current = true;
     void handleCheckForUpdate("startup");
   }, [handleCheckForUpdate]);
+
+  useEffect(() => {
+    if (!inTauriRuntime()) return;
+    let unlistenUpdate: (() => void) | null = null;
+    void (async () => {
+      try {
+        const { listen } = await loadTauriEventModule();
+        unlistenUpdate = await listen<UpdateDownloadEventPayload>("update-download-progress", (event) => {
+          const payload = event.payload;
+          if (!payload) return;
+          setUpdateDownloadInfo({
+            version: payload.version,
+            fileName: payload.fileName,
+            downloadedBytes: payload.downloadedBytes,
+            totalBytes: payload.totalBytes,
+            percent: payload.percent,
+            error: payload.error ?? null,
+          });
+          if (payload.status === "started" || payload.status === "progress") {
+            setUpdateOverlayPhase("downloading");
+            const progressText = payload.percent == null ? "..." : `${Math.round(payload.percent)}%`;
+            setStatus(t("updateDownloadStatus", { version: payload.version, progress: progressText }));
+            return;
+          }
+          if (payload.status === "finished" && payload.path) {
+            setUpdateOverlayPhase("ready");
+            setStatus(t("updateReadyStatus", { version: payload.version }));
+          }
+        });
+      } catch {
+      }
+    })();
+    return () => {
+      if (unlistenUpdate) unlistenUpdate();
+    };
+  }, [t]);
+
+  const updateStatusTone = resolveUpdateStatusTone(updateOverlayPhase);
+  const updateDownloadLabel = buildUpdateDownloadLabel({
+    downloadedBytes: updateDownloadInfo.downloadedBytes,
+    totalBytes: updateDownloadInfo.totalBytes,
+    percent: updateDownloadInfo.percent,
+  });
+  const statusBarUpdateLabel = useMemo(() => {
+    if (updateOverlayPhase === "downloading") {
+      return t("updateDownloadingShort", { progress: updateDownloadInfo.percent == null ? "..." : `${Math.round(updateDownloadInfo.percent)}%` });
+    }
+    if (updateOverlayPhase === "ready" && preparedUpdate) {
+      return t("updateReadyShort", { version: preparedUpdate.version });
+    }
+    if (updateOverlayPhase === "failed") {
+      return t("updateFailedShort");
+    }
+    if (updateCandidate?.latest.version) {
+      return t("updateAvailableStatus", { version: updateCandidate.latest.version });
+    }
+    return "";
+  }, [preparedUpdate, t, updateCandidate, updateDownloadInfo.percent, updateOverlayPhase]);
 
   const visibleFiles = useMemo(() => {
     const keyword = fileSearch.trim().toLowerCase();
@@ -1691,6 +1834,11 @@ function App() {
     void setView(name);
   }, [setView]);
 
+  const closeTopMenuDropdowns = useCallback(() => {
+    viewMenuRef.current?.removeAttribute("open");
+    setIsHelpMenuOpen(false);
+  }, []);
+
   const requestViewerZoom = useCallback((scale: number) => {
     setViewerZoomRequest((prev) => ({ nonce: prev.nonce + 1, scale }));
   }, []);
@@ -2009,12 +2157,25 @@ function App() {
 
   useEffect(() => {
     if (!immersiveViewer || immersiveTopChromeVisible) return;
-    viewMenuRef.current?.removeAttribute("open");
+    closeTopMenuDropdowns();
     const active = document.activeElement;
     if (active instanceof HTMLElement && topChromeRef.current?.contains(active)) {
       active.blur();
     }
-  }, [immersiveTopChromeVisible, immersiveViewer]);
+  }, [closeTopMenuDropdowns, immersiveTopChromeVisible, immersiveViewer]);
+
+  useEffect(() => {
+    if (!isHelpMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && helpMenuRef.current?.contains(target)) return;
+      setIsHelpMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isHelpMenuOpen]);
 
   useEffect(() => {
     const resolveMode = (target: HTMLElement): TooltipMode => {
@@ -2023,6 +2184,7 @@ function App() {
         target.closest(".viewer-float-actions") ||
         target.closest(".top-chrome") ||
         target.closest(".view-menu-list") ||
+        target.closest(".help-menu-list") ||
         target.closest(".viewer-meta")
       ) {
         return "below-right";
@@ -2324,6 +2486,81 @@ function App() {
     </div>
   );
 
+  const utilityControls = {
+    language: (
+      <div className="menu-inline-control" key="language">
+        <label><Languages size={13} />{t("language")}</label>
+        <select value={currentLocale} onChange={(e) => void changeLocale(e.target.value)}>
+          <option value="zh-CN">中文</option>
+          <option value="en-US">English</option>
+        </select>
+      </div>
+    ),
+    theme: (
+      <div className="menu-inline-control" key="theme">
+        <label>{resolvedTheme === "light" ? <Sun size={13} /> : <Moon size={13} />}{t("theme")}</label>
+        <select value={themeMode} onChange={(e) => setThemeMode(e.target.value as ThemeMode)}>
+          <option value="system">{t("themeSystem")}</option>
+          <option value="navy">{t("themeNavy")}</option>
+          <option value="xdark">{t("themeDark")}</option>
+          <option value="light">{t("themeLight")}</option>
+        </select>
+      </div>
+    ),
+    shortcuts: (
+      <button key="shortcuts" className="menu-btn" data-ui-tooltip={shortcutButtonTooltip} onClick={() => setShowShortcutModal(true)}>
+        <Keyboard size={14} />{t("shortcuts")}
+      </button>
+    ),
+    help: (
+      <div className="help-menu" ref={helpMenuRef} key="help">
+        <button
+          type="button"
+          className="menu-btn"
+          data-ui-tooltip={t("help")}
+          aria-haspopup="menu"
+          aria-expanded={isHelpMenuOpen}
+          onClick={() => setIsHelpMenuOpen((open) => !open)}
+        >
+          <BadgeInfo size={14} />{t("help")}
+        </button>
+        {isHelpMenuOpen && <div className="help-menu-list">
+          {HELP_MENU_ACTION_ORDER.map((item) => {
+            if (item === "checkUpdate") {
+              return (
+                <button
+                  key={item}
+                  data-ui-tooltip={t("checkUpdate")}
+                  onClick={() => {
+                    setIsHelpMenuOpen(false);
+                    void handleCheckForUpdate("manual");
+                  }}
+                  disabled={updateChecking || updateOverlayPhase === "downloading" || updateInstalling}
+                >
+                  <Download size={14} />
+                  <span>{updateChecking ? t("checkingUpdate") : t("checkUpdate")}</span>
+                </button>
+              );
+            }
+            return (
+              <button
+                key={item}
+                data-ui-tooltip={t("aboutTitle")}
+                onClick={() => {
+                  setIsHelpMenuOpen(false);
+                  setShowAboutModal(true);
+                }}
+              >
+                <BadgeInfo size={14} />
+                <span>{t("aboutTitle")}</span>
+              </button>
+            );
+          })}
+        </div>}
+      </div>
+    ),
+  } as const;
+
   return (
     <div className={`app-shell compact${immersiveViewer ? " immersive-viewer" : ""}${immersiveTopChromeVisible ? " immersive-chrome-visible" : ""}`}>
       {startupMaskConfig.visible && (
@@ -2352,38 +2589,14 @@ function App() {
             <div className="menu-tag">{folderPath || t("noFolder")}</div>
           </div>
           <div className="menu-right">
-            <button className="menu-btn" data-ui-tooltip={shortcutButtonTooltip} onClick={() => setShowShortcutModal(true)}>
-              <Keyboard size={14} />{t("shortcuts")}
-            </button>
-            <button
-              className="menu-btn"
-              data-ui-tooltip={t("checkUpdate")}
-              onClick={() => void handleCheckForUpdate("manual")}
-              disabled={updateChecking}
-            >
-              <Download size={14} />{updateChecking ? t("checkingUpdate") : t("checkUpdate")}
-            </button>
             <div className="menu-mode-readonly">
               <Drill size={13} />
               <span>{t("mode")}:</span>
               <b>{ncMode === "laser" ? t("modeLaser") : t("modeNormal")}</b>
             </div>
-            <div className="menu-inline-control">
-              <label><Languages size={13} />{t("language")}</label>
-              <select value={currentLocale} onChange={(e) => void changeLocale(e.target.value)}>
-                <option value="zh-CN">中文</option>
-                <option value="en-US">English</option>
-              </select>
-            </div>
-            <div className="menu-inline-control">
-              <label>{resolvedTheme === "light" ? <Sun size={13} /> : <Moon size={13} />}{t("theme")}</label>
-              <select value={themeMode} onChange={(e) => setThemeMode(e.target.value as ThemeMode)}>
-                <option value="system">{t("themeSystem")}</option>
-                <option value="navy">{t("themeNavy")}</option>
-                <option value="xdark">{t("themeDark")}</option>
-                <option value="light">{t("themeLight")}</option>
-              </select>
-            </div>
+            {UTILITY_MENU_CONTROL_ORDER.map((id) => (
+              <Fragment key={id}>{utilityControls[id]}</Fragment>
+            ))}
           </div>
         </div>
 
@@ -2857,16 +3070,125 @@ function App() {
                     <strong>{appVersion}</strong>
                   </div>
                 </div>
-                <div className="update-download-url" title={showUpdateModal.latest.url}>{showUpdateModal.latest.url}</div>
+                <div className="update-callout">
+                  <strong>{t("updateInAppTitle")}</strong>
+                  <span>{t("updateActionHint")}</span>
+                </div>
               </div>
             </div>
             <div className="shortcut-modal-foot">
-              <span className="shortcut-modal-hint">{t("updateActionHint")}</span>
+              <span className="shortcut-modal-hint">{t("updatePromptHint")}</span>
               <div className="update-modal-actions">
                 <button className="menu-btn" onClick={() => setShowUpdateModal(null)}>{t("updateLater")}</button>
-                <button className="menu-btn primary" onClick={() => void handleOpenUpdate()} disabled={updateOpening}>
-                  {updateOpening ? t("updateOpening") : t("updateNow")}
+                <button className="menu-btn primary" onClick={() => void startUpdateDownload(showUpdateModal)}>
+                  {t("updateNow")}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAboutModal && (
+        <div className="modal-mask" onClick={() => setShowAboutModal(false)}>
+          <div className="shortcut-modal update-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="shortcut-modal-head">
+              <div className="shortcut-modal-title">
+                <h4>{t("aboutTitle")}</h4>
+                <p>{t("aboutDesc")}</p>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowAboutModal(false)} data-ui-tooltip={t("close")} aria-label={t("close")}>
+                <X size={14} />
+              </button>
+            </div>
+            <div className="shortcut-modal-body">
+              <div className="shortcut-card update-card">
+                <div className="update-version-grid">
+                  <div className="update-version-item">
+                    <span className="update-version-label">{t("appVersion")}</span>
+                    <strong>{appVersion}</strong>
+                  </div>
+                  <div className="update-version-item">
+                    <span className="update-version-label">{t("aboutUpdateState")}</span>
+                    <strong>{statusBarUpdateLabel || t("updateNoAvailable")}</strong>
+                  </div>
+                  <div className="update-version-item">
+                    <span className="update-version-label">{t("updateLatestVersion")}</span>
+                    <strong>{preparedUpdate?.version || updateCandidate?.latest.version || "-"}</strong>
+                  </div>
+                  <div className="update-version-item">
+                    <span className="update-version-label">{t("updatePackageLabel")}</span>
+                    <strong>{preparedUpdate?.fileName || updateDownloadInfo.fileName || "-"}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="shortcut-modal-foot">
+              <span className="shortcut-modal-hint">{t("aboutActionHint")}</span>
+              <div className="update-modal-actions">
+                <button className="menu-btn" onClick={() => void handleCheckForUpdate("manual")} disabled={updateChecking || updateOverlayPhase === "downloading"}>
+                  {updateChecking ? t("checkingUpdate") : t("checkUpdate")}
+                </button>
+                {preparedUpdate && (
+                  <button className="menu-btn primary" onClick={() => {
+                    setUpdateOverlayVisible(true);
+                    setUpdateOverlayPhase("ready");
+                  }}>
+                    {t("updateReadyAction")}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {updateOverlayVisible && updateOverlayPhase !== "idle" && (
+        <div className="update-splash-mask">
+          <div className="update-splash-shell">
+            <div className="update-splash-brand">{t("appTitle")}</div>
+            <div className="update-splash-card">
+              <span className={`update-splash-tone ${updateStatusTone}`}>{t("updateOverlayTitle")}</span>
+              <h3>{updateOverlayPhase === "ready" ? t("updateOverlayReadyTitle") : updateOverlayPhase === "failed" ? t("updateOverlayFailedTitle") : t("updateOverlayDownloadingTitle")}</h3>
+              <p>
+                {updateOverlayPhase === "ready"
+                  ? t("updateOverlayReadyDesc")
+                  : updateOverlayPhase === "failed"
+                    ? (updateDownloadInfo.error || t("updateDownloadFailed"))
+                    : t("updateOverlayDownloadingDesc")}
+              </p>
+              <div className="update-splash-version">
+                <span>{appVersion}</span>
+                <span className="update-splash-arrow">→</span>
+                <strong>{preparedUpdate?.version || updateDownloadInfo.version || updateCandidate?.latest.version || "-"}</strong>
+              </div>
+              <div className="update-splash-progress-card">
+                <div className="update-splash-progress-head">
+                  <span>{t("updateProgressLabel")}</span>
+                  <strong>{updateDownloadInfo.percent == null ? "--" : `${Math.round(updateDownloadInfo.percent)}%`}</strong>
+                </div>
+                <div className="update-splash-progress-track" aria-hidden="true">
+                  <div className="update-splash-progress-fill" style={{ width: `${Math.max(4, Math.min(100, updateDownloadInfo.percent ?? 4))}%` }} />
+                </div>
+                <div className="update-splash-progress-meta">
+                  <span>{updateDownloadLabel}</span>
+                  <span>{preparedUpdate?.fileName || updateDownloadInfo.fileName}</span>
+                </div>
+              </div>
+              <div className="update-splash-actions">
+                {(updateOverlayPhase === "ready" || updateOverlayPhase === "failed") && (
+                  <button className="menu-btn" onClick={() => setUpdateOverlayVisible(false)}>{t("updateLater")}</button>
+                )}
+                {updateOverlayPhase === "failed" && updateCandidate && (
+                  <button className="menu-btn primary" onClick={() => void startUpdateDownload(updateCandidate)}>
+                    {t("retry")}
+                  </button>
+                )}
+                {updateOverlayPhase === "ready" && (
+                  <button className="menu-btn primary" onClick={() => void handleLaunchPreparedUpdate()} disabled={updateInstalling}>
+                    {updateInstalling ? t("updateInstalling") : t("updateRestartNow")}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -2877,6 +3199,22 @@ function App() {
         <span className="status-bar-primary" title={status}>{status}</span>
         <span className="status-bar-file" title={activeFile ? basename(activeFile) : "-"}>{activeFile ? basename(activeFile) : "-"}</span>
         <span className="status-bar-meta">
+          {statusBarUpdateLabel && (
+            <button
+              type="button"
+              className={`status-bar-update-pill ${updateStatusTone}`}
+              onClick={() => {
+                if (updateOverlayPhase === "idle" && updateCandidate) {
+                  setShowUpdateModal(updateCandidate);
+                  return;
+                }
+                setUpdateOverlayVisible(true);
+              }}
+            >
+              <span>{statusBarUpdateLabel}</span>
+              {updateOverlayPhase === "downloading" && <strong>{updateDownloadInfo.percent == null ? "--" : `${Math.round(updateDownloadInfo.percent)}%`}</strong>}
+            </button>
+          )}
           <span className="status-bar-points" title={`${frames.length} ${t("pathPointsUnit")}`}>
             {`${frames.length} ${t("pathPointsUnit")}`}
           </span>

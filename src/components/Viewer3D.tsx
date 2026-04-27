@@ -11,7 +11,7 @@ import { getGizmoAxisMaterialProps, getGizmoHaloMaterialProps } from "../lib/vie
 import { buildViewerHoverInfo } from "../lib/viewerHoverInfo";
 import { asDreiLinePoints } from "../lib/viewerLinePoints";
 import { getViewerSourceSignature, isSegmentRecordStale } from "../lib/viewerPlaybackState";
-import { findClosestScreenSpaceSegment } from "../lib/viewerPick";
+import { findClosestScreenSpaceSegmentInPools } from "../lib/viewerPick";
 import { areViewer3DPropsEqual, type Viewer3DProps } from "../lib/viewer3dProps";
 import { type SegmentRecord } from "../lib/viewerSegments";
 import { buildViewerPickCollections, buildViewerRenderBuffers, buildViewerSceneData } from "../lib/viewerSceneData";
@@ -333,8 +333,8 @@ function GlobeOrientationGizmo({
 }
 
 function RayPickController({
-  sampledSegments,
-  fullSegments,
+  sampledCutSegments,
+  sampledRapidSegments,
   cutSegments,
   rapidSegments,
   enabled,
@@ -345,8 +345,8 @@ function RayPickController({
   onPickSegment,
   onHoverEnd,
 }: {
-  sampledSegments: SegmentRecord[];
-  fullSegments: SegmentRecord[];
+  sampledCutSegments: SegmentRecord[];
+  sampledRapidSegments: SegmentRecord[];
   cutSegments: SegmentRecord[];
   rapidSegments: SegmentRecord[];
   enabled: boolean;
@@ -360,7 +360,7 @@ function RayPickController({
   const { camera, gl } = useThree();
 
   useEffect(() => {
-    if (!sampledSegments.length) return;
+    if (!sampledCutSegments.length && !sampledRapidSegments.length) return;
     const dom = gl.domElement;
     const raycaster = new Raycaster();
     const ndc = new Vector2();
@@ -403,7 +403,7 @@ function RayPickController({
         const my = clientY - rect.top;
         const pxThreshold = 28;
         const pxThresholdSq = pxThreshold * pxThreshold;
-        const best = findClosestScreenSpaceSegment(fullSegments, mx, my, pxThresholdSq, (seg) => {
+        const best = findClosestScreenSpaceSegmentInPools([cutSegments, rapidSegments], mx, my, pxThresholdSq, (seg) => {
           pa.set(seg.start.x, seg.start.y, seg.start.z).project(camera);
           pb.set(seg.end.x, seg.end.y, seg.end.z).project(camera);
           if (!Number.isFinite(pa.x) || !Number.isFinite(pa.y) || !Number.isFinite(pb.x) || !Number.isFinite(pb.y)) {
@@ -426,22 +426,26 @@ function RayPickController({
 
       const threshold = worldThreshold() * (preferExact ? 1.35 : 1);
       const thresholdSq = threshold * threshold;
-      const coarsePool = clickExact ? fullSegments : sampledSegments;
+      const coarsePools = clickExact
+        ? [cutSegments, rapidSegments]
+        : [sampledCutSegments, sampledRapidSegments];
       let coarse: SegmentRecord | null = null;
       let coarseD2 = Number.POSITIVE_INFINITY;
-      for (const seg of coarsePool) {
-        segA.set(seg.start.x, seg.start.y, seg.start.z);
-        segB.set(seg.end.x, seg.end.y, seg.end.z);
-        const d2 = raycaster.ray.distanceSqToSegment(segA, segB, ptRay, ptSeg);
-        if (d2 < coarseD2 && d2 <= thresholdSq) {
-          coarseD2 = d2;
-          coarse = seg;
+      for (const coarsePool of coarsePools) {
+        for (const seg of coarsePool) {
+          segA.set(seg.start.x, seg.start.y, seg.start.z);
+          segB.set(seg.end.x, seg.end.y, seg.end.z);
+          const d2 = raycaster.ray.distanceSqToSegment(segA, segB, ptRay, ptSeg);
+          if (d2 < coarseD2 && d2 <= thresholdSq) {
+            coarseD2 = d2;
+            coarse = seg;
+          }
         }
       }
       if (!coarse) return null;
       if (clickExact) return coarse;
 
-      const full = clickExact ? fullSegments : (coarse.lane === "cut" ? cutSegments : rapidSegments);
+      const full = coarse.lane === "cut" ? cutSegments : rapidSegments;
       const halfWindow = Math.max(60, Math.min(420, Math.floor(full.length * 0.012)));
       const from = Math.max(0, coarse.sourceIndex - halfWindow);
       const to = Math.min(full.length - 1, coarse.sourceIndex + halfWindow);
@@ -545,8 +549,8 @@ function RayPickController({
     onHoverStateChange,
     onPickSegment,
     rapidSegments,
-    sampledSegments,
-    fullSegments,
+    sampledCutSegments,
+    sampledRapidSegments,
     sceneScale,
   ]);
 
@@ -688,8 +692,8 @@ function Viewer3DInner({
   );
   const { segmentData, sceneScale, geometryCenter } = sceneData;
   const pickCollections = useMemo(
-    () => buildViewerPickCollections(segmentData, showRapidPath, scaledCount),
-    [scaledCount, segmentData, showRapidPath],
+    () => buildViewerPickCollections(segmentData, scaledCount),
+    [scaledCount, segmentData],
   );
   const renderBuffers = useMemo(
     () => buildViewerRenderBuffers(segmentData, scaledCount),
@@ -980,19 +984,25 @@ function Viewer3DInner({
       };
     };
 
-    const best = findClosestScreenSpaceSegment(pickCollections.fullSegments, mx, my, 40 * 40, (seg) => {
-      const start = toScreen(seg.start);
-      const end = toScreen(seg.end);
-      if (!Number.isFinite(start.x) || !Number.isFinite(start.y) || !Number.isFinite(end.x) || !Number.isFinite(end.y)) {
-        return {
-          ax: Number.POSITIVE_INFINITY,
-          ay: Number.POSITIVE_INFINITY,
-          bx: Number.POSITIVE_INFINITY,
-          by: Number.POSITIVE_INFINITY,
-        };
-      }
-      return { ax: start.x, ay: start.y, bx: end.x, by: end.y };
-    });
+    const best = findClosestScreenSpaceSegmentInPools(
+      [segmentData.cutSegments, showRapidPath ? segmentData.rapidSegments : []],
+      mx,
+      my,
+      40 * 40,
+      (seg) => {
+        const start = toScreen(seg.start);
+        const end = toScreen(seg.end);
+        if (!Number.isFinite(start.x) || !Number.isFinite(start.y) || !Number.isFinite(end.x) || !Number.isFinite(end.y)) {
+          return {
+            ax: Number.POSITIVE_INFINITY,
+            ay: Number.POSITIVE_INFINITY,
+            bx: Number.POSITIVE_INFINITY,
+            by: Number.POSITIVE_INFINITY,
+          };
+        }
+        return { ax: start.x, ay: start.y, bx: end.x, by: end.y };
+      },
+    );
 
     if (!best) {
       return { x: controls.target.x, y: controls.target.y, z: controls.target.z };
@@ -1011,7 +1021,7 @@ function Viewer3DInner({
       y: best.start.y + (best.end.y - best.start.y) * ratio,
       z: best.start.z + (best.end.z - best.start.z) * ratio,
     };
-  }, [pickCollections.fullSegments]);
+  }, [segmentData.cutSegments, segmentData.rapidSegments, showRapidPath]);
 
   const handleWheel = useCallback((e: ReactWheelEvent<HTMLDivElement>) => {
     const controls = controlsRef.current;
@@ -1253,8 +1263,8 @@ function Viewer3DInner({
         />
         <FocusOverlay focusSegment={focusSegment} focusWidth={focusWidth} sceneScale={sceneScale} />
         <MemoRayPickController
-          sampledSegments={pickCollections.sampledSegments}
-          fullSegments={pickCollections.fullSegments}
+          sampledCutSegments={pickCollections.pickCutSegments}
+          sampledRapidSegments={showRapidPath ? pickCollections.pickRapidSegments : []}
           cutSegments={segmentData.cutSegments}
           rapidSegments={showRapidPath ? segmentData.rapidSegments : []}
           enabled={!isPointerDown}
