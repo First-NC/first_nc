@@ -1519,9 +1519,10 @@ fn find_named_file_recursive(root: &Path, target_name: &std::ffi::OsStr) -> Opti
     None
 }
 
-fn restart_updated_application(target_path: &Path, restart_path: &Path) -> Result<(), String> {
+fn restart_updated_application(_target_path: &Path, restart_path: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
+        let target_path = _target_path;
         let _ = restart_path;
         let status = Command::new("open")
             .arg(target_path)

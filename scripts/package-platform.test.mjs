@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildEnvForPlatform, resolveBuildPlan, resolveExecutionPlan } from "./package-platform.mjs";
+import { buildEnvForPlatform, resolveBuildPlan, resolveExecutionPlan, toTarPathArg } from "./package-platform.mjs";
 
 test("mac default resolves to Apple Silicon app and dmg bundles", () => {
   const plan = resolveBuildPlan("mac");
@@ -66,4 +66,15 @@ test("mac uses Tauri native dmg bundling when Apple signing env is present", () 
   const plan = resolveExecutionPlan("mac", { APPLE_CERTIFICATE: "set" });
   assert.equal(plan.tauriBundles, "app,dmg");
   assert.equal(plan.createPlainDmg, false);
+});
+
+test("tar path args are normalized to repo-relative POSIX paths when possible", () => {
+  assert.equal(
+    toTarPathArg("D:\\a\\first_nc\\first_nc", "D:\\a\\first_nc\\first_nc\\src-tauri\\target\\out.tar.gz"),
+    "src-tauri/target/out.tar.gz",
+  );
+  assert.equal(
+    toTarPathArg("/repo", "/repo/src-tauri/target/out.tar.gz"),
+    "src-tauri/target/out.tar.gz",
+  );
 });

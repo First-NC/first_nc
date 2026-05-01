@@ -19,17 +19,23 @@ jobs:
             target: x86_64-pc-windows-msvc
             package_script: package:win
             artifact: first-nc-windows-x64
-            artifact_path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle
+            artifact_path: |
+              src-tauri/target/x86_64-pc-windows-msvc/release/bundle
+              src-tauri/target/x86_64-pc-windows-msvc/release/artifacts
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             package_script: package:linux:docker
             artifact: first-nc-linux-x64
-            artifact_path: src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb
+            artifact_path: |
+              src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb
+              src-tauri/target/x86_64-unknown-linux-gnu/release/artifacts
           - os: macos-14
             target: aarch64-apple-darwin
             package_script: package:mac
             artifact: first-nc-macos-apple-silicon
-            artifact_path: src-tauri/target/aarch64-apple-darwin/release/bundle
+            artifact_path: |
+              src-tauri/target/aarch64-apple-darwin/release/bundle
+              src-tauri/target/aarch64-apple-darwin/release/artifacts
 
     runs-on: ${{ matrix.os }}
 

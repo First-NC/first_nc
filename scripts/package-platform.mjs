@@ -171,12 +171,29 @@ function findFirstFile(rootDir, matcher) {
   return walkFiles(rootDir).find((filePath) => matcher(path.basename(filePath)));
 }
 
+export function toTarPathArg(repoRoot, targetPath) {
+  const pathImpl = /^[a-zA-Z]:[\\/]/.test(repoRoot) || /^[a-zA-Z]:[\\/]/.test(targetPath)
+    ? path.win32
+    : path;
+  const relativePath = pathImpl.relative(repoRoot, targetPath);
+  if (!relativePath || relativePath.startsWith("..")) {
+    return targetPath;
+  }
+  return relativePath.split(pathImpl.sep).join("/");
+}
+
 async function createTarGzArchive(repoRoot, sourcePath, outputPath) {
   rmSync(outputPath, { force: true });
   mkdirSync(path.dirname(outputPath), { recursive: true });
   await runCommand(
     "tar",
-    ["-czf", outputPath, "-C", path.dirname(sourcePath), path.basename(sourcePath)],
+    [
+      "-czf",
+      toTarPathArg(repoRoot, outputPath),
+      "-C",
+      toTarPathArg(repoRoot, path.dirname(sourcePath)),
+      path.basename(sourcePath),
+    ],
     { cwd: repoRoot, env: buildEnv() },
   );
 }

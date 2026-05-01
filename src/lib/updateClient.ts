@@ -1,3 +1,4 @@
+import { appConfig } from "./appConfig";
 import { STORAGE_KEYS } from "./storageKeys";
 
 export type UpdateVersionInfo = {
@@ -45,7 +46,6 @@ export type CheckForUpdateResult = {
 const metaEnv = (import.meta as ImportMeta & {
   env?: Record<string, string | undefined>;
 }).env;
-const DEFAULT_API_BASE_URL = metaEnv?.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const DEFAULT_FALLBACK_VERSION = "0.0.0";
 
 function normalizeApiBaseUrl(value: string): string {
@@ -173,7 +173,7 @@ export async function checkForAppUpdate(options: CheckForUpdateOptions = {}): Pr
     },
     {
       timeoutMs: options.timeoutMs ?? 30000,
-      apiBaseUrl: options.apiBaseUrl ?? DEFAULT_API_BASE_URL,
+      apiBaseUrl: options.apiBaseUrl ?? appConfig.apiBaseUrl,
     },
   );
 

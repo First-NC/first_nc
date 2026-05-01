@@ -17,6 +17,32 @@ npm run tauri:dev
 cd src-tauri && cargo check
 ```
 
+## 环境模式
+
+桌面端通过 Vite `mode` 区分三套环境：
+
+- `local` -> [`.env.local`](/Users/reddyfan/code/FNC/first_nc/.env.local)
+- `dev` -> [`.env.dev`](/Users/reddyfan/code/FNC/first_nc/.env.dev)
+- `prod` -> [`.env.prod`](/Users/reddyfan/code/FNC/first_nc/.env.prod)
+
+对应后端地址：
+
+- `local` -> `http://127.0.0.1:8000`
+- `dev` -> `https://test-api.firstnc.cn`
+- `prod` -> `https://api.firstnc.cn`
+
+常用命令：
+
+```bash
+npm run dev:local
+npm run dev:dev
+npm run dev:prod
+
+npm run build:local
+npm run build:dev
+npm run build:prod
+```
+
 ## 开发约定
 
 - 前端使用 TypeScript 和 ESLint

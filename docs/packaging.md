@@ -12,6 +12,13 @@
 - macOS Apple Silicon：`app` + `dmg`
 - macOS Intel：`app` + `dmg`
 
+同时，所有桌面平台都会额外产出一个应用内更新包：
+
+- `first-nc-<version>-windows-x64-in-app-update.tar.gz`
+- `first-nc-<version>-ubuntu-x64-in-app-update.tar.gz`
+- `first-nc-<version>-macos-aarch64-in-app-update.tar.gz`
+- `first-nc-<version>-macos-x64-in-app-update.tar.gz`
+
 ## 2. 统一命令入口
 
 仓库使用以下统一打包命令：
@@ -80,6 +87,7 @@ npm run package:linux
 
 - `src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage`
 - `src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb`
+- `src-tauri/target/x86_64-unknown-linux-gnu/release/artifacts`
 
 ### 4.2 macOS Apple Silicon
 
@@ -88,6 +96,11 @@ npm ci
 npm run package:mac
 ```
 
+产物目录：
+
+- `src-tauri/target/aarch64-apple-darwin/release/bundle`
+- `src-tauri/target/aarch64-apple-darwin/release/artifacts`
+
 ### 4.3 macOS Intel
 
 ```bash
@@ -95,12 +108,22 @@ npm ci
 npm run package:mac:intel
 ```
 
+产物目录：
+
+- `src-tauri/target/x86_64-apple-darwin/release/bundle`
+- `src-tauri/target/x86_64-apple-darwin/release/artifacts`
+
 ### 4.4 Windows x64
 
 ```powershell
 npm ci
 npm run package:win
 ```
+
+产物目录：
+
+- `src-tauri/target/x86_64-pc-windows-msvc/release/bundle`
+- `src-tauri/target/x86_64-pc-windows-msvc/release/artifacts`
 
 ## 5. 本地打包限制
 
@@ -121,6 +144,12 @@ npm run package:win
 - `first-nc-windows-x64`
 - `first-nc-linux-x64`
 - `first-nc-macos-apple-silicon`
+
+说明：
+
+- 安装包原始 bundle 仍位于 `release/bundle`
+- 版本化后的安装包和 `in-app-update.tar.gz` 位于 `release/artifacts`
+- CI 现在会同时上传 `bundle` 和 `artifacts`
 
 关键约束：
 

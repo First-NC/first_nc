@@ -15,7 +15,8 @@ test("workflow only auto-builds desktop bundles for version tags", () => {
 
 test("workflow builds Linux packages in a Jammy-compatible container", () => {
   assert.match(workflow, /package_script:\s*package:linux:docker/);
-  assert.match(workflow, /artifact_path:\s*src-tauri\/target\/x86_64-unknown-linux-gnu\/release\/bundle\/deb/);
+  assert.match(workflow, /artifact_path:\s*\|[\s\S]*src-tauri\/target\/x86_64-unknown-linux-gnu\/release\/bundle\/deb/);
+  assert.match(workflow, /src-tauri\/target\/x86_64-unknown-linux-gnu\/release\/artifacts/);
 });
 
 test("workflow no longer requests the unsupported macOS Intel runner", () => {
