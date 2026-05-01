@@ -3,13 +3,16 @@ use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::{
     collections::HashMap,
+    env,
     fs,
     path::{Path, PathBuf},
+    process::{self, Command, Stdio},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Mutex,
     },
-    time::UNIX_EPOCH,
+    thread,
+    time::{Duration, UNIX_EPOCH},
 };
 use tauri::{Emitter, Manager, Size, Theme, WebviewUrl, WebviewWindowBuilder};
 
@@ -241,6 +244,7 @@ struct UpdateDownloadRequest {
     url: String,
     version: String,
     os: String,
+    package_kind: Option<String>,
     file_name: Option<String>,
 }
 
@@ -251,6 +255,7 @@ struct PreparedUpdatePackage {
     file_name: String,
     version: String,
     os: String,
+    package_kind: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1035,6 +1040,7 @@ async fn download_update_package(
         file_name: file_name.clone(),
         version: request.version.clone(),
         os: request.os.clone(),
+        package_kind: normalize_update_package_kind(request.package_kind.as_deref()),
     };
 
     let _ = app.emit(
@@ -1061,29 +1067,13 @@ fn launch_prepared_update(package_path: String, app: tauri::AppHandle) -> Result
         return Err("prepared update package is missing".to_string());
     }
 
-    #[cfg(target_os = "macos")]
-    let status = std::process::Command::new("open")
-        .arg(path.as_os_str())
-        .status()
-        .map_err(|e| format!("failed to launch update package: {e}"))?;
-
-    #[cfg(target_os = "windows")]
-    let status = std::process::Command::new("cmd")
-        .args(["/C", "start", ""])
-        .arg(path.as_os_str())
-        .status()
-        .map_err(|e| format!("failed to launch update package: {e}"))?;
-
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let status = std::process::Command::new("xdg-open")
-        .arg(path.as_os_str())
-        .status()
-        .map_err(|e| format!("failed to launch update package: {e}"))?;
-
-    if !status.success() {
-        return Err(format!("failed to launch update package, exit status: {status}"));
+    if is_in_app_update_package(&path) {
+        spawn_standalone_updater(&path, &app)?;
+        app.exit(0);
+        return Ok(());
     }
 
+    launch_interactive_update_package(&path)?;
     app.exit(0);
     Ok(())
 }
@@ -1103,12 +1093,16 @@ fn resolve_update_file_name(parsed: &url::Url, request: &UpdateDownloadRequest) 
         .and_then(|segments| segments.filter(|segment| !segment.is_empty()).last())
     {
         let decoded = percent_decode_path_segment(last);
-        if has_supported_installer_extension(&decoded) {
+        if has_supported_update_extension(&decoded) {
             return sanitize_update_file_name(&decoded);
         }
     }
 
-    format!("first-nc-{}.{}", request.version, infer_update_extension(&request.os))
+    infer_update_package_file_name(
+        &request.version,
+        &request.os,
+        normalize_update_package_kind(request.package_kind.as_deref()),
+    )
 }
 
 fn sanitize_update_file_name(input: &str) -> String {
@@ -1123,19 +1117,64 @@ fn sanitize_update_file_name(input: &str) -> String {
     }
 }
 
-fn has_supported_installer_extension(input: &str) -> bool {
+fn has_supported_update_extension(input: &str) -> bool {
     let lower = input.to_ascii_lowercase();
-    [".msi", ".exe", ".deb", ".dmg", ".app"]
+    [".msi", ".exe", ".deb", ".dmg", ".app", ".tar.gz"]
         .iter()
         .any(|suffix| lower.ends_with(suffix))
 }
 
-fn infer_update_extension(os: &str) -> &'static str {
-    match os.to_ascii_lowercase().as_str() {
+fn normalize_update_package_kind(value: Option<&str>) -> String {
+    match value.unwrap_or("installer").trim().to_ascii_lowercase().as_str() {
+        "in_app_update" => "in_app_update".to_string(),
+        _ => "installer".to_string(),
+    }
+}
+
+fn infer_update_package_file_name(version: &str, os: &str, package_kind: String) -> String {
+    if package_kind == "in_app_update" {
+        return format!("first-nc-{version}-{os}-in-app-update.tar.gz");
+    }
+    let extension = match os.to_ascii_lowercase().as_str() {
         "windows" => "exe",
         "ubuntu" => "deb",
         _ => "dmg",
+    };
+    format!("first-nc-{version}-{os}-installer.{extension}")
+}
+
+fn is_in_app_update_package(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase().ends_with(".tar.gz"))
+        .unwrap_or(false)
+}
+
+fn launch_interactive_update_package(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let status = Command::new("open")
+        .arg(path.as_os_str())
+        .status()
+        .map_err(|e| format!("failed to launch update package: {e}"))?;
+
+    #[cfg(target_os = "windows")]
+    let status = Command::new("cmd")
+        .args(["/C", "start", ""])
+        .arg(path.as_os_str())
+        .status()
+        .map_err(|e| format!("failed to launch update package: {e}"))?;
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let status = Command::new("xdg-open")
+        .arg(path.as_os_str())
+        .status()
+        .map_err(|e| format!("failed to launch update package: {e}"))?;
+
+    if !status.success() {
+        return Err(format!("failed to launch update package, exit status: {status}"));
     }
+
+    Ok(())
 }
 
 fn percent_decode_path_segment(input: &str) -> String {
@@ -1166,6 +1205,344 @@ fn update_download_dir<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<P
         .join("updates");
     fs::create_dir_all(&dir).map_err(|e| format!("failed to create update dir: {e}"))?;
     Ok(dir)
+}
+
+fn spawn_standalone_updater<R: tauri::Runtime>(
+    package_path: &Path,
+    app: &tauri::AppHandle<R>,
+) -> Result<(), String> {
+    let current_exe = env::current_exe().map_err(|e| format!("failed to resolve current executable: {e}"))?;
+    let updates_dir = update_download_dir(app)?;
+    let temp_updater_path = updates_dir.join(temp_updater_name());
+    let _ = fs::remove_file(&temp_updater_path);
+    fs::copy(&current_exe, &temp_updater_path)
+        .map_err(|e| format!("failed to stage updater executable: {e}"))?;
+    ensure_executable_permissions(&temp_updater_path)?;
+
+    let target_path = resolve_update_target_path(&current_exe)?;
+    let restart_path = resolve_restart_path(&current_exe)?;
+
+    Command::new(&temp_updater_path)
+        .arg("--apply-update")
+        .arg("--parent-pid")
+        .arg(process::id().to_string())
+        .arg("--package-path")
+        .arg(package_path)
+        .arg("--target-path")
+        .arg(target_path)
+        .arg("--restart-path")
+        .arg(restart_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("failed to launch standalone updater: {e}"))?;
+
+    Ok(())
+}
+
+fn temp_updater_name() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        return format!("first-nc-updater-{}.exe", process::id());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        format!("first-nc-updater-{}", process::id())
+    }
+}
+
+fn resolve_update_target_path(current_exe: &Path) -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return current_app_bundle_path(current_exe);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(current_exe.to_path_buf())
+    }
+}
+
+fn resolve_restart_path(current_exe: &Path) -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let bundle_path = current_app_bundle_path(current_exe)?;
+        return Ok(bundle_path
+            .join("Contents")
+            .join("MacOS")
+            .join(
+                current_exe
+                    .file_name()
+                    .ok_or_else(|| "missing executable name".to_string())?,
+            ));
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(current_exe.to_path_buf())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn current_app_bundle_path(current_exe: &Path) -> Result<PathBuf, String> {
+    current_exe
+        .ancestors()
+        .find(|ancestor| {
+            ancestor
+                .extension()
+                .and_then(|value| value.to_str())
+                .map(|value| value.eq_ignore_ascii_case("app"))
+                .unwrap_or(false)
+        })
+        .map(Path::to_path_buf)
+        .ok_or_else(|| "failed to resolve installed app bundle path".to_string())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn ensure_executable_permissions(path: &Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs::metadata(path)
+        .map_err(|e| format!("failed to read updater permissions: {e}"))?
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions)
+        .map_err(|e| format!("failed to mark updater executable: {e}"))?;
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn ensure_executable_permissions(_path: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+fn maybe_run_updater_mode() -> Result<bool, String> {
+    let mut args = env::args_os().skip(1);
+    let Some(first) = args.next() else {
+        return Ok(false);
+    };
+    if first != "--apply-update" {
+        return Ok(false);
+    }
+
+    let mut parent_pid: Option<u32> = None;
+    let mut package_path: Option<PathBuf> = None;
+    let mut target_path: Option<PathBuf> = None;
+    let mut restart_path: Option<PathBuf> = None;
+
+    while let Some(flag) = args.next() {
+        match flag.to_string_lossy().as_ref() {
+            "--parent-pid" => {
+                parent_pid = args
+                    .next()
+                    .and_then(|value| value.to_string_lossy().parse::<u32>().ok());
+            }
+            "--package-path" => package_path = args.next().map(PathBuf::from),
+            "--target-path" => target_path = args.next().map(PathBuf::from),
+            "--restart-path" => restart_path = args.next().map(PathBuf::from),
+            _ => {}
+        }
+    }
+
+    run_standalone_updater(
+        parent_pid.ok_or_else(|| "missing updater parent pid".to_string())?,
+        package_path.ok_or_else(|| "missing updater package path".to_string())?,
+        target_path.ok_or_else(|| "missing updater target path".to_string())?,
+        restart_path.ok_or_else(|| "missing updater restart path".to_string())?,
+    )?;
+    Ok(true)
+}
+
+fn run_standalone_updater(
+    parent_pid: u32,
+    package_path: PathBuf,
+    target_path: PathBuf,
+    restart_path: PathBuf,
+) -> Result<(), String> {
+    wait_for_process_exit(parent_pid);
+
+    let work_dir = env::temp_dir().join(format!("first-nc-update-{}", process::id()));
+    if work_dir.exists() {
+        fs::remove_dir_all(&work_dir).map_err(|e| format!("failed to reset update workspace: {e}"))?;
+    }
+    fs::create_dir_all(&work_dir).map_err(|e| format!("failed to create update workspace: {e}"))?;
+
+    extract_tar_archive(&package_path, &work_dir)?;
+    apply_extracted_update(&work_dir, &target_path, &restart_path)?;
+    restart_updated_application(&target_path, &restart_path)?;
+
+    let _ = fs::remove_file(&package_path);
+    Ok(())
+}
+
+fn wait_for_process_exit(parent_pid: u32) {
+    for _ in 0..300 {
+        if !process_is_running(parent_pid) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(250));
+    }
+    thread::sleep(Duration::from_millis(500));
+}
+
+#[cfg(target_os = "windows")]
+fn process_is_running(pid: u32) -> bool {
+    Command::new("cmd")
+        .args(["/C", "tasklist", "/FI", &format!("PID eq {pid}")])
+        .output()
+        .ok()
+        .map(|output| String::from_utf8_lossy(&output.stdout).contains(&pid.to_string()))
+        .unwrap_or(false)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn process_is_running(pid: u32) -> bool {
+    Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn extract_tar_archive(package_path: &Path, output_dir: &Path) -> Result<(), String> {
+    let status = Command::new("tar")
+        .args(["-xzf"])
+        .arg(package_path)
+        .args(["-C"])
+        .arg(output_dir)
+        .status()
+        .map_err(|e| format!("failed to extract update package: {e}"))?;
+    if !status.success() {
+        return Err(format!("failed to extract update package, exit status: {status}"));
+    }
+    Ok(())
+}
+
+fn apply_extracted_update(
+    extracted_root: &Path,
+    target_path: &Path,
+    restart_path: &Path,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = restart_path;
+        return replace_app_bundle(extracted_root, target_path);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let replacement = find_replacement_binary(extracted_root, restart_path)?;
+        return replace_single_file(&replacement, target_path);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn replace_app_bundle(extracted_root: &Path, target_path: &Path) -> Result<(), String> {
+    let replacement = fs::read_dir(extracted_root)
+        .map_err(|e| format!("failed to inspect extracted update bundle: {e}"))?
+        .filter_map(|entry| entry.ok().map(|value| value.path()))
+        .find(|path| {
+            path.extension()
+                .and_then(|value| value.to_str())
+                .map(|value| value.eq_ignore_ascii_case("app"))
+                .unwrap_or(false)
+        })
+        .ok_or_else(|| "missing app bundle in extracted update package".to_string())?;
+
+    let backup_path = target_path.with_extension("app.old");
+    let _ = fs::remove_dir_all(&backup_path);
+    if target_path.exists() {
+        fs::rename(target_path, &backup_path)
+            .map_err(|e| format!("failed to move old app bundle aside: {e}"))?;
+    }
+    fs::rename(&replacement, target_path)
+        .map_err(|e| format!("failed to activate new app bundle: {e}"))?;
+    let _ = fs::remove_dir_all(&backup_path);
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn find_replacement_binary(extracted_root: &Path, restart_path: &Path) -> Result<PathBuf, String> {
+    let target_name = restart_path
+        .file_name()
+        .ok_or_else(|| "missing restart executable name".to_string())?;
+    find_named_file_recursive(extracted_root, target_name)
+        .ok_or_else(|| "missing replacement executable in extracted update package".to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn replace_single_file(source: &Path, target_path: &Path) -> Result<(), String> {
+    let parent = target_path
+        .parent()
+        .ok_or_else(|| "missing target parent directory".to_string())?;
+    let target_name = target_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "invalid target file name".to_string())?;
+    let staged_target = parent.join(format!("{target_name}.new"));
+    let backup_path = parent.join(format!(
+        "{}.old",
+        target_name
+    ));
+    let _ = fs::remove_file(&backup_path);
+    fs::copy(source, &staged_target).map_err(|e| format!("failed to stage replacement executable: {e}"))?;
+    ensure_executable_permissions(&staged_target)?;
+    if target_path.exists() {
+        fs::rename(target_path, &backup_path)
+            .map_err(|e| format!("failed to move old executable aside: {e}"))?;
+    }
+    if staged_target != target_path {
+        fs::rename(&staged_target, target_path)
+            .map_err(|e| format!("failed to activate replacement executable: {e}"))?;
+    }
+    let _ = fs::remove_file(&backup_path);
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn find_named_file_recursive(root: &Path, target_name: &std::ffi::OsStr) -> Option<PathBuf> {
+    let entries = fs::read_dir(root).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_named_file_recursive(&path, target_name) {
+                return Some(found);
+            }
+            continue;
+        }
+        if path.file_name() == Some(target_name) {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn restart_updated_application(target_path: &Path, restart_path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = restart_path;
+        let status = Command::new("open")
+            .arg(target_path)
+            .status()
+            .map_err(|e| format!("failed to relaunch app bundle: {e}"))?;
+        if !status.success() {
+            return Err(format!("failed to relaunch app bundle, exit status: {status}"));
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Command::new(restart_path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("failed to relaunch updated app: {e}"))?;
+        Ok(())
+    }
 }
 
 fn normalize_launch_arg_to_file(raw: &str) -> Option<PathBuf> {
@@ -1360,6 +1737,12 @@ fn parse_ini_like(content: &str) -> HashMap<String, HashMap<String, String>> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    match maybe_run_updater_mode() {
+        Ok(true) => return,
+        Ok(false) => {}
+        Err(error) => panic!("standalone updater failed: {error}"),
+    }
+
     #[cfg(target_os = "macos")]
     apply_macos_process_name();
 

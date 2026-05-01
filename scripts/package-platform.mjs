@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { accessSync, constants, cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { accessSync, constants, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { syncVersionFromPackageJson } from "./sync-version.mjs";
@@ -142,6 +142,97 @@ function bundleRoot(repoRoot, target) {
   return path.join(repoRoot, "src-tauri", "target", target, "release", "bundle");
 }
 
+function artifactRoot(repoRoot, target) {
+  return path.join(repoRoot, "src-tauri", "target", target, "release", "artifacts");
+}
+
+function platformSlugForBuild(name) {
+  if (name.startsWith("win")) return "windows";
+  if (name.startsWith("mac")) return "macos";
+  return "ubuntu";
+}
+
+function walkFiles(rootDir) {
+  if (!existsSync(rootDir)) return [];
+  const results = [];
+  for (const entry of readdirSync(rootDir)) {
+    const fullPath = path.join(rootDir, entry);
+    const stats = statSync(fullPath);
+    if (stats.isDirectory()) {
+      results.push(...walkFiles(fullPath));
+      continue;
+    }
+    results.push(fullPath);
+  }
+  return results;
+}
+
+function findFirstFile(rootDir, matcher) {
+  return walkFiles(rootDir).find((filePath) => matcher(path.basename(filePath)));
+}
+
+async function createTarGzArchive(repoRoot, sourcePath, outputPath) {
+  rmSync(outputPath, { force: true });
+  mkdirSync(path.dirname(outputPath), { recursive: true });
+  await runCommand(
+    "tar",
+    ["-czf", outputPath, "-C", path.dirname(sourcePath), path.basename(sourcePath)],
+    { cwd: repoRoot, env: buildEnv() },
+  );
+}
+
+async function createVersionedArtifacts(repoRoot, buildName, target) {
+  const { productName, version } = readTauriMetadata(repoRoot);
+  const platformSlug = platformSlugForBuild(buildName);
+  const archSlug = archLabelForTarget(target);
+  const artifactsDir = artifactRoot(repoRoot, target);
+  const bundleDir = bundleRoot(repoRoot, target);
+  const prefix = `first-nc-${version}-${platformSlug}-${archSlug}`;
+  rmSync(artifactsDir, { recursive: true, force: true });
+  mkdirSync(artifactsDir, { recursive: true });
+
+  if (platformSlug === "macos") {
+    const dmgPath = findFirstFile(path.join(bundleDir, "dmg"), (name) => name.toLowerCase().endsWith(".dmg"));
+    if (dmgPath) {
+      cpSync(dmgPath, path.join(artifactsDir, `${prefix}-installer.dmg`));
+    }
+    const appPath = path.join(bundleDir, "macos", `${productName}.app`);
+    if (existsSync(appPath)) {
+      await createTarGzArchive(repoRoot, appPath, path.join(artifactsDir, `${prefix}-in-app-update.tar.gz`));
+    }
+    return;
+  }
+
+  if (platformSlug === "windows") {
+    const nsisPath = findFirstFile(path.join(bundleDir, "nsis"), (name) => name.toLowerCase().endsWith(".exe"));
+    if (nsisPath) {
+      cpSync(nsisPath, path.join(artifactsDir, `${prefix}-installer.exe`));
+    }
+    const msiPath = findFirstFile(path.join(bundleDir, "msi"), (name) => name.toLowerCase().endsWith(".msi"));
+    if (msiPath) {
+      cpSync(msiPath, path.join(artifactsDir, `${prefix}-installer.msi`));
+    }
+    const appExePath = path.join(repoRoot, "src-tauri", "target", target, "release", "FirstNC.exe");
+    if (existsSync(appExePath)) {
+      await createTarGzArchive(repoRoot, appExePath, path.join(artifactsDir, `${prefix}-in-app-update.tar.gz`));
+    }
+    return;
+  }
+
+  const debPath = findFirstFile(path.join(bundleDir, "deb"), (name) => name.toLowerCase().endsWith(".deb"));
+  if (debPath) {
+    cpSync(debPath, path.join(artifactsDir, `${prefix}-installer.deb`));
+  }
+  const appImagePath = findFirstFile(path.join(bundleDir, "appimage"), (name) => name.toLowerCase().endsWith(".appimage"));
+  if (appImagePath) {
+    cpSync(appImagePath, path.join(artifactsDir, `${prefix}-installer.AppImage`));
+  }
+  const linuxBinaryPath = path.join(repoRoot, "src-tauri", "target", target, "release", "first-nc");
+  if (existsSync(linuxBinaryPath)) {
+    await createTarGzArchive(repoRoot, linuxBinaryPath, path.join(artifactsDir, `${prefix}-in-app-update.tar.gz`));
+  }
+}
+
 async function reSignMacAppBundle(repoRoot, appBundlePath) {
   await runCommand(
     "codesign",
@@ -212,6 +303,8 @@ async function runBuild(name) {
   if (createPlainDmg) {
     await createPlainMacDmg(repoRoot, target);
   }
+
+  await createVersionedArtifacts(repoRoot, name, target);
 }
 
 const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

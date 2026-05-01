@@ -27,17 +27,32 @@ function inferInstallerExtension(os: UpdateVersionInfo["os"]): string {
   }
 }
 
-export function deriveUpdateFileName(url: string, version: string, os: UpdateVersionInfo["os"]): string {
+function inferPackageExtension(packageKind: UpdateVersionInfo["package_kind"], os: UpdateVersionInfo["os"]): string {
+  if (packageKind === "in_app_update") {
+    return "tar.gz";
+  }
+  return inferInstallerExtension(os);
+}
+
+export function deriveUpdateFileName(
+  url: string,
+  version: string,
+  os: UpdateVersionInfo["os"],
+  packageKind: UpdateVersionInfo["package_kind"],
+): string {
   try {
     const parsed = new URL(url);
     const name = parsed.pathname.split("/").filter(Boolean).at(-1) ?? "";
-    if (/\.(msi|exe|deb|dmg|app)$/i.test(name)) {
+    if (/\.(msi|exe|deb|dmg|app|tar\.gz)$/i.test(name)) {
       return decodeURIComponent(name);
     }
   } catch {
   }
 
-  return `first-nc-${version}.${inferInstallerExtension(os)}`;
+  if (packageKind === "in_app_update") {
+    return `first-nc-${version}-${os}-in-app-update.${inferPackageExtension(packageKind, os)}`;
+  }
+  return `first-nc-${version}-${os}-installer.${inferPackageExtension(packageKind, os)}`;
 }
 
 export function buildUpdateDownloadLabel(snapshot: UpdateDownloadSnapshot): string {

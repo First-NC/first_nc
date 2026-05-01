@@ -93,6 +93,7 @@ type PreparedUpdatePackage = {
   fileName: string;
   version: string;
   os: string;
+  packageKind?: "installer" | "in_app_update";
 };
 
 type UpdateDownloadEventPayload = {
@@ -869,7 +870,12 @@ function App() {
       return;
     }
 
-    const fileName = deriveUpdateFileName(prompt.latest.url, prompt.latest.version, prompt.latest.os);
+    const fileName = deriveUpdateFileName(
+      prompt.latest.url,
+      prompt.latest.version,
+      prompt.latest.os,
+      prompt.latest.package_kind,
+    );
     setUpdateOverlayVisible(true);
     setUpdateOverlayPhase("downloading");
     setPreparedUpdate(null);
@@ -890,13 +896,28 @@ function App() {
           url: prompt.latest.url,
           version: prompt.latest.version,
           os: prompt.latest.os,
+          packageKind: prompt.latest.package_kind,
           fileName,
         },
       });
       setPreparedUpdate(prepared);
       setUpdateOverlayPhase("ready");
       setStatus(t("updateReadyStatus", { version: prompt.latest.version }));
+      try {
+        setUpdateInstalling(true);
+        setStatus(t("updateRestartingStatus", { version: prompt.latest.version }));
+        await invokeTauri("launch_prepared_update", { packagePath: prepared.path });
+      } catch {
+        setUpdateInstalling(false);
+        setUpdateOverlayPhase("failed");
+        setUpdateDownloadInfo((prev) => ({
+          ...prev,
+          error: t("updateLaunchFailed"),
+        }));
+        setStatus(t("updateLaunchFailed"));
+      }
     } catch {
+      setUpdateInstalling(false);
       setUpdateOverlayPhase("failed");
       setUpdateDownloadInfo((prev) => ({
         ...prev,
@@ -3091,52 +3112,28 @@ function App() {
 
       {showAboutModal && (
         <div className="modal-mask" onClick={() => setShowAboutModal(false)}>
-          <div className="shortcut-modal update-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="shortcut-modal-head">
+          <div className="shortcut-modal update-modal about-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="shortcut-modal-head about-modal-head">
               <div className="shortcut-modal-title">
                 <h4>{t("aboutTitle")}</h4>
-                <p>{t("aboutDesc")}</p>
               </div>
               <button className="modal-close-btn" onClick={() => setShowAboutModal(false)} data-ui-tooltip={t("close")} aria-label={t("close")}>
                 <X size={14} />
               </button>
             </div>
             <div className="shortcut-modal-body">
-              <div className="shortcut-card update-card">
-                <div className="update-version-grid">
-                  <div className="update-version-item">
-                    <span className="update-version-label">{t("appVersion")}</span>
-                    <strong>{appVersion}</strong>
-                  </div>
-                  <div className="update-version-item">
-                    <span className="update-version-label">{t("aboutUpdateState")}</span>
-                    <strong>{statusBarUpdateLabel || t("updateNoAvailable")}</strong>
-                  </div>
-                  <div className="update-version-item">
-                    <span className="update-version-label">{t("updateLatestVersion")}</span>
-                    <strong>{preparedUpdate?.version || updateCandidate?.latest.version || "-"}</strong>
-                  </div>
-                  <div className="update-version-item">
-                    <span className="update-version-label">{t("updatePackageLabel")}</span>
-                    <strong>{preparedUpdate?.fileName || updateDownloadInfo.fileName || "-"}</strong>
-                  </div>
+              <div className="shortcut-card about-card">
+                <div className="about-brand-mark" aria-hidden="true">
+                  <img
+                    alt=""
+                    className="about-brand-logo"
+                    src={resolvedTheme === "light" ? "/logo-first-nc.png" : "/logo-first-nc-dark.png"}
+                  />
                 </div>
-              </div>
-            </div>
-            <div className="shortcut-modal-foot">
-              <span className="shortcut-modal-hint">{t("aboutActionHint")}</span>
-              <div className="update-modal-actions">
-                <button className="menu-btn" onClick={() => void handleCheckForUpdate("manual")} disabled={updateChecking || updateOverlayPhase === "downloading"}>
-                  {updateChecking ? t("checkingUpdate") : t("checkUpdate")}
-                </button>
-                {preparedUpdate && (
-                  <button className="menu-btn primary" onClick={() => {
-                    setUpdateOverlayVisible(true);
-                    setUpdateOverlayPhase("ready");
-                  }}>
-                    {t("updateReadyAction")}
-                  </button>
-                )}
+                <div className="about-version-copy">
+                  <span className="update-version-label">{t("appVersion")}</span>
+                  <strong className="about-version-value">{appVersion}</strong>
+                </div>
               </div>
             </div>
           </div>
@@ -3176,7 +3173,7 @@ function App() {
                 </div>
               </div>
               <div className="update-splash-actions">
-                {(updateOverlayPhase === "ready" || updateOverlayPhase === "failed") && (
+                {updateOverlayPhase === "failed" && (
                   <button className="menu-btn" onClick={() => setUpdateOverlayVisible(false)}>{t("updateLater")}</button>
                 )}
                 {updateOverlayPhase === "failed" && updateCandidate && (
@@ -3184,7 +3181,7 @@ function App() {
                     {t("retry")}
                   </button>
                 )}
-                {updateOverlayPhase === "ready" && (
+                {updateOverlayPhase === "ready" && !updateInstalling && (
                   <button className="menu-btn primary" onClick={() => void handleLaunchPreparedUpdate()} disabled={updateInstalling}>
                     {updateInstalling ? t("updateInstalling") : t("updateRestartNow")}
                   </button>

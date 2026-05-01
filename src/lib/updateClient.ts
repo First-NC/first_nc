@@ -4,6 +4,7 @@ export type UpdateVersionInfo = {
   id: number;
   version: string;
   os: string;
+  package_kind: "installer" | "in_app_update";
   url: string;
   created_at: string;
   updated_at: string;
@@ -31,6 +32,7 @@ type CheckForUpdateOptions = {
   clientId?: string;
   currentVersion?: string;
   os?: string;
+  packageKind?: "installer" | "in_app_update";
 };
 
 export type CheckForUpdateResult = {
@@ -57,15 +59,27 @@ export function resolveUpdateOs(input?: string): "windows" | "macos" | "ubuntu" 
   return "ubuntu";
 }
 
+/**
+ * 读取或初始化「更新检查」用的稳定 client id。
+ * - 若 storage 中已有值，直接复用。
+ * - 否则生成新 id 并写入（若传入 null/undefined storage 则不持久化，仅本次返回值可用）。
+ *
+ * 生成策略：
+ * 1. 优先 `crypto.randomUUID()`（运行时支持时），标准 UUID v4，碰撞概率可忽略。
+ * 2. 否则使用时间戳 base36 + 随机段拼成前缀串，适配无 Web Crypto / 老旧环境；
+ *    碰撞风险略高于 UUID，仍可接受客户端标识用途。
+ */
 export function getOrCreateUpdateClientId(
   storage: Pick<Storage, "getItem" | "setItem"> | null | undefined,
 ): string {
   const stored = storage?.getItem(STORAGE_KEYS.updateClientId);
   if (stored) return stored;
 
-  const generated = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `first-nc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const generated =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      // 降级：`Date.now()` 36 进制缩时序 + `Math.random` 截取，非密码学随机，够用即可。
+      : `first-nc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
   storage?.setItem(STORAGE_KEYS.updateClientId, generated);
   return generated;
@@ -101,6 +115,7 @@ async function requestUpdateCheck(
     client_id: string;
     current_version: string;
     os: string;
+    package_kind: "installer" | "in_app_update";
   },
   options: {
     timeoutMs: number;
@@ -154,6 +169,7 @@ export async function checkForAppUpdate(options: CheckForUpdateOptions = {}): Pr
       client_id: clientId,
       current_version: currentVersion,
       os,
+      package_kind: options.packageKind ?? "in_app_update",
     },
     {
       timeoutMs: options.timeoutMs ?? 30000,

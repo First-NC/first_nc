@@ -2142,6 +2142,65 @@ label { font-size: 13px; color: var(--muted); display: inline-flex; align-items:
   gap: 16px;
 }
 
+.about-card {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 26px;
+  min-height: 0;
+  width: min(100%, 520px);
+  min-height: 360px;
+  margin: 0 auto;
+  padding: 34px 28px 28px;
+  border: 1px solid color-mix(in oklab, var(--border) 88%, transparent);
+  background: color-mix(in oklab, var(--panel) 94%, transparent);
+  box-shadow: none;
+}
+
+.about-modal-head {
+  align-items: flex-start;
+  margin-bottom: 10px;
+  padding-bottom: 16px;
+}
+
+.about-modal-head .shortcut-modal-title p {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.about-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.about-brand-logo {
+  width: 144px;
+  height: 144px;
+  object-fit: contain;
+}
+
+.about-version-copy {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  justify-items: center;
+  text-align: center;
+}
+
+.about-version-copy .update-version-label {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.about-version-value {
+  font-size: clamp(34px, 5.6vw, 46px);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--text);
+}
+
 .update-version-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2280,6 +2339,23 @@ label { font-size: 13px; color: var(--muted); display: inline-flex; align-items:
   }
   .update-version-grid {
     grid-template-columns: 1fr;
+  }
+
+  .about-brand-mark {
+    width: auto;
+    height: auto;
+  }
+
+  .about-brand-logo {
+    width: 116px;
+    height: 116px;
+  }
+
+  .about-card {
+    width: 100%;
+    min-height: 320px;
+    gap: 20px;
+    padding: 26px 20px 22px;
   }
   .update-splash-mask {
     padding: 16px;

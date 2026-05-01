@@ -9,19 +9,37 @@ import {
 
 test("deriveUpdateFileName keeps installer extension from url", () => {
   assert.equal(
-    deriveUpdateFileName("https://example.com/releases/FirstNC-0.2.0.msi?token=abc", "0.2.0", "windows"),
+    deriveUpdateFileName(
+      "https://example.com/releases/FirstNC-0.2.0.msi?token=abc",
+      "0.2.0",
+      "windows",
+      "installer",
+    ),
     "FirstNC-0.2.0.msi",
   );
   assert.equal(
-    deriveUpdateFileName("https://example.com/releases/FirstNC-0.2.0.dmg", "0.2.0", "macos"),
+    deriveUpdateFileName("https://example.com/releases/FirstNC-0.2.0.dmg", "0.2.0", "macos", "installer"),
     "FirstNC-0.2.0.dmg",
+  );
+  assert.equal(
+    deriveUpdateFileName(
+      "https://example.com/releases/first-nc-0.2.0-macos-in-app-update.tar.gz",
+      "0.2.0",
+      "macos",
+      "in_app_update",
+    ),
+    "first-nc-0.2.0-macos-in-app-update.tar.gz",
   );
 });
 
 test("deriveUpdateFileName falls back to platform installer extension", () => {
   assert.equal(
-    deriveUpdateFileName("https://example.com/releases/latest", "0.2.0", "ubuntu"),
-    "first-nc-0.2.0.deb",
+    deriveUpdateFileName("https://example.com/releases/latest", "0.2.0", "ubuntu", "installer"),
+    "first-nc-0.2.0-ubuntu-installer.deb",
+  );
+  assert.equal(
+    deriveUpdateFileName("https://example.com/releases/latest", "0.2.0", "windows", "in_app_update"),
+    "first-nc-0.2.0-windows-in-app-update.tar.gz",
   );
 });
 
