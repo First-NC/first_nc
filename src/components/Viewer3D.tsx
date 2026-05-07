@@ -9,8 +9,14 @@ import type { CameraState } from "../types";
 import { resolveViewerFocusPointBuffer } from "../lib/viewerFocusSegment";
 import { getGizmoAxisMaterialProps, getGizmoHaloMaterialProps } from "../lib/viewerGizmoLayers";
 import { buildViewerHoverInfo } from "../lib/viewerHoverInfo";
+import {
+  resolveActivePickedSegment,
+  resolveHoverLineText,
+  resolveViewerAdaptiveFactor,
+  resolveViewerCanvasDpr,
+} from "../lib/viewerInteractionState";
 import { asDreiLinePoints } from "../lib/viewerLinePoints";
-import { getViewerSourceSignature, isSegmentRecordStale } from "../lib/viewerPlaybackState";
+import { getViewerSourceSignature } from "../lib/viewerPlaybackState";
 import { findClosestScreenSpaceSegmentInPools } from "../lib/viewerPick";
 import { areViewer3DPropsEqual, type Viewer3DProps } from "../lib/viewer3dProps";
 import { type SegmentRecord } from "../lib/viewerSegments";
@@ -670,22 +676,12 @@ function Viewer3DInner({
   const [pickedSegment, setPickedSegment] = useState<SegmentRecord | null>(null);
   const hoverDelayRef = useRef<number | null>(null);
   const suppressExternalCameraSyncUntilRef = useRef(0);
-  const adaptiveFactor = useMemo(() => {
-    const n = frames.length;
-    if (n > 120_000) return 0.28;
-    if (n > 60_000) return 0.42;
-    if (n > 20_000) return 0.62;
-    return 1;
-  }, [frames.length]);
+  const adaptiveFactor = useMemo(() => resolveViewerAdaptiveFactor(frames.length), [frames.length]);
   const scaledCount = useCallback((base: number, floor = 1200) => {
     return Math.max(floor, Math.floor(base * adaptiveFactor));
   }, [adaptiveFactor]);
-  const canvasDpr = useMemo<[number, number]>(() => {
-    if (adaptiveFactor <= 0.42) return [0.55, 0.9];
-    if (adaptiveFactor < 1) return [0.7, 1];
-    return [0.85, 1.25];
-  }, [adaptiveFactor]);
-  const normalizedCodeLines = codeLines ?? [];
+  const canvasDpr = useMemo<[number, number]>(() => resolveViewerCanvasDpr(adaptiveFactor), [adaptiveFactor]);
+  const normalizedCodeLines = useMemo(() => codeLines ?? [], [codeLines]);
   const sceneData = useMemo(
     () => buildViewerSceneData(frames, normalizedCodeLines),
     [frames, normalizedCodeLines],
@@ -705,15 +701,19 @@ function Viewer3DInner({
   const renderRapidPoints = renderBuffers.rapidPoints;
   const sourceSignature = useMemo(() => getViewerSourceSignature(frames), [frames]);
   const markerFrame = currentFrame ?? hoverFrame ?? null;
+  const activePickedSegment = useMemo(
+    () => resolveActivePickedSegment(pickedSegment, frames, currentFrame),
+    [currentFrame, frames, pickedSegment],
+  );
 
   const focusSegment = useMemo(() => {
-    return resolveViewerFocusPointBuffer(frames, markerFrame, pickedSegment);
-  }, [frames, markerFrame, pickedSegment]);
+    return resolveViewerFocusPointBuffer(frames, markerFrame, activePickedSegment);
+  }, [activePickedSegment, frames, markerFrame]);
 
   const focusWidth = markerFrame?.motion === "Rapid" ? 1.2 : 1.8;
   const hoverInfo = useMemo(() => {
     if (!hoverTooltip) return null;
-    const rawLine = normalizedCodeLines[Math.max(0, (hoverTooltip.segment.endFrame.lineNumber ?? 1) - 1)] ?? "";
+    const rawLine = resolveHoverLineText(normalizedCodeLines, hoverTooltip.segment);
     return buildViewerHoverInfo(hoverTooltip.segment, rawLine);
   }, [hoverTooltip, normalizedCodeLines]);
 
@@ -759,16 +759,7 @@ function Viewer3DInner({
   useEffect(() => {
     clearHoverTooltip();
     setIsPickTargetHovered(false);
-    setPickedSegment((prev) => (isSegmentRecordStale(prev, frames) ? null : prev));
   }, [clearHoverTooltip, frames, sourceSignature]);
-
-  useEffect(() => {
-    if (!pickedSegment || !currentFrame) return;
-    const sameFrame =
-      pickedSegment.endFrame.index === currentFrame.index &&
-      pickedSegment.endFrame.lineNumber === currentFrame.lineNumber;
-    if (!sameFrame) setPickedSegment(null);
-  }, [currentFrame, pickedSegment]);
 
   useLayoutEffect(() => {
     if (isPointerDown || rotateDragRef.current.active) return;

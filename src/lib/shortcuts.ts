@@ -25,6 +25,7 @@ export type ShortcutId =
   | "pathNext";
 
 export type ShortcutMap = Record<ShortcutId, string>;
+const MODIFIER_ORDER = ["Ctrl", "Alt", "Shift", "Meta"] as const;
 
 export function isApplePlatform(platformLike: string | undefined): boolean {
   if (!platformLike) return false;
@@ -33,8 +34,9 @@ export function isApplePlatform(platformLike: string | undefined): boolean {
 }
 
 export function getDefaultShortcuts(platformLike?: string): ShortcutMap {
-  const primary = isApplePlatform(platformLike) ? "Meta" : "Ctrl";
-  const secondary = isApplePlatform(platformLike) ? "Meta" : "Alt";
+  const isApple = isApplePlatform(platformLike);
+  const primary = isApple ? "Meta" : "Ctrl";
+  const secondary = isApple ? "Meta" : "Alt";
   return {
     openShortcuts: `${primary}+K`,
     openNc: `${primary}+O`,
@@ -85,25 +87,11 @@ export function normalizeShortcut(input: string): string {
     .map((p) => p.trim())
     .filter(Boolean);
   if (!parts.length) return "";
-  const normalized = parts.map((part, idx) => {
-    const lower = part.toLowerCase();
-    if (lower === "ctrl" || lower === "control") return "Ctrl";
-    if (lower === "alt" || lower === "option") return "Alt";
-    if (lower === "shift") return "Shift";
-    if (lower === "meta" || lower === "cmd" || lower === "command" || lower === "win") return "Meta";
-    if (lower === "space") return "Space";
-    if (lower === "arrowup") return "ArrowUp";
-    if (lower === "arrowdown") return "ArrowDown";
-    if (lower === "arrowleft") return "ArrowLeft";
-    if (lower === "arrowright") return "ArrowRight";
-    if (part === "+" || part === "-") return part;
-    if (idx === parts.length - 1 && part.length === 1) return part.toUpperCase();
-    return part.charAt(0).toUpperCase() + part.slice(1);
-  });
-  const modifierOrder = ["Ctrl", "Alt", "Shift", "Meta"];
-  const modifiers = normalized.filter((p) => modifierOrder.includes(p));
-  const key = normalized.find((p) => !modifierOrder.includes(p)) ?? "";
-  const orderedMods = modifierOrder.filter((m) => modifiers.includes(m));
+
+  const normalized = parts.map((part, idx) => normalizeShortcutPart(part, idx === parts.length - 1));
+  const modifiers = normalized.filter(isModifierKey);
+  const key = normalized.find((part) => !isModifierKey(part)) ?? "";
+  const orderedMods = MODIFIER_ORDER.filter((modifier) => modifiers.includes(modifier));
   return [...orderedMods, key].filter(Boolean).join("+");
 }
 
@@ -149,4 +137,24 @@ export function findShortcutConflicts(shortcuts: ShortcutMap): Partial<Record<Sh
     }
   }
   return conflicts;
+}
+
+function normalizeShortcutPart(part: string, isLastPart: boolean): string {
+  const lower = part.toLowerCase();
+  if (lower === "ctrl" || lower === "control") return "Ctrl";
+  if (lower === "alt" || lower === "option") return "Alt";
+  if (lower === "shift") return "Shift";
+  if (lower === "meta" || lower === "cmd" || lower === "command" || lower === "win") return "Meta";
+  if (lower === "space") return "Space";
+  if (lower === "arrowup") return "ArrowUp";
+  if (lower === "arrowdown") return "ArrowDown";
+  if (lower === "arrowleft") return "ArrowLeft";
+  if (lower === "arrowright") return "ArrowRight";
+  if (part === "+" || part === "-") return part;
+  if (isLastPart && part.length === 1) return part.toUpperCase();
+  return part.charAt(0).toUpperCase() + part.slice(1);
+}
+
+function isModifierKey(value: string): value is (typeof MODIFIER_ORDER)[number] {
+  return MODIFIER_ORDER.includes(value as (typeof MODIFIER_ORDER)[number]);
 }

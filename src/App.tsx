@@ -44,6 +44,16 @@ import { getViewerSourceSignature, shouldClearTransientViewerState } from "./lib
 import { applyThemePaletteToDom, getBootThemePalette, resolveBootTheme } from "./lib/themeBoot";
 import { getStartupMaskConfig } from "./lib/startupMask";
 import { migrateStorageNamespace, STORAGE_KEYS } from "./lib/storageKeys";
+import { basename, cameraForView, dirname, formatFileSize, formatFileTime } from "./lib/appViewUtils";
+import {
+  buildShortcutGroups,
+  buildShortcutItemMap,
+  buildShortcutItems,
+  buildVisibleFiles,
+  buildVisibleRecentFiles,
+  type FileSortField,
+  type SortOrder,
+} from "./lib/appShellData";
 import { resolveRestoredFrameIndex, sanitizeStoredWorkspaceSession, type StoredWorkspaceSession } from "./lib/workspaceSession";
 import { clampWorkspaceWindowState, sanitizeStoredWorkspaceWindowState } from "./lib/workspaceState";
 import { sanitizeToolbarPrefs } from "./lib/toolbarPrefs";
@@ -58,7 +68,6 @@ import {
   type ShortcutId,
   type ShortcutMap,
 } from "./lib/shortcuts";
-import { getShortcutGroups } from "./lib/shortcutGroups";
 import type { CameraState, FrameState, LoadedProgramState, NcFileItem, NcMode, ParseResult, Vec3 } from "./types";
 import { parseNcToFrames } from "./lib/ncPath";
 import { checkForAppUpdate, resolveCurrentAppVersion, type UpdateVersionInfo } from "./lib/updateClient";
@@ -73,8 +82,6 @@ import { HELP_MENU_ACTION_ORDER, UTILITY_MENU_CONTROL_ORDER } from "./lib/topMen
 type ThemeMode = "system" | "light" | "navy" | "xdark";
 type SpeedMode = "Low" | "Standard" | "High";
 type InteractionMode = "pan" | "rotate";
-type FileSortField = "createdAtMs" | "fileName" | "sizeBytes";
-type SortOrder = "asc" | "desc";
 type RecentFileItem = { path: string; fileName: string; lastOpenedAtMs: number };
 type TooltipMode = "below-center" | "below-right" | "side-right";
 type ActiveTooltip = {
@@ -139,124 +146,7 @@ const STORAGE_TOOLBAR_PREFS_KEY = STORAGE_KEYS.toolbarPrefs;
 try {
   migrateStorageNamespace(localStorage);
 } catch {
-}
-
-
-function dirname(path: string): string {
-  const idx = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
-  return idx > 0 ? path.slice(0, idx) : path;
-}
-
-function basename(path: string): string {
-  const idx = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
-  return idx >= 0 ? path.slice(idx + 1) : path;
-}
-
-function formatFileSize(sizeBytes: number): string {
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatFileTime(createdAtMs: number, locale: string): string {
-  if (!createdAtMs || Number.isNaN(createdAtMs)) return "-";
-  return new Date(createdAtMs).toLocaleString(locale === "zh-CN" ? "zh-CN" : "en-US", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function centerOf(frames: FrameState[]): Vec3 {
-  const b = boundsOf(frames);
-  return { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2, z: (b.minZ + b.maxZ) / 2 };
-}
-
-function framesForCenter(frames: FrameState[]): FrameState[] {
-  if (frames.length < 2) return frames;
-  const firstCut = frames.findIndex((f, i) => i > 0 && f.motion && f.motion !== "Rapid");
-  let base = firstCut > 0 ? frames.slice(Math.max(0, firstCut - 1)) : frames;
-  if (base.length < 2) base = frames;
-
-  const p0 = base[0]?.position;
-  if (p0) {
-    const nearOrigin = Math.hypot(p0.x, p0.y, p0.z) < 1e-6;
-    if (nearOrigin && base.length > 2) {
-      const withoutFirst = base.slice(1);
-      const hasFarPoint = withoutFirst.some((f) => Math.hypot(f.position.x, f.position.y, f.position.z) > 1);
-      if (hasFarPoint) base = withoutFirst;
-    }
-  }
-  return base;
-}
-
-function boundsOf(frames: FrameState[]) {
-  const targetFrames = framesForCenter(frames);
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let minZ = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  let maxZ = Number.NEGATIVE_INFINITY;
-  for (const f of targetFrames) {
-    minX = Math.min(minX, f.position.x);
-    minY = Math.min(minY, f.position.y);
-    minZ = Math.min(minZ, f.position.z);
-    maxX = Math.max(maxX, f.position.x);
-    maxY = Math.max(maxY, f.position.y);
-    maxZ = Math.max(maxZ, f.position.z);
-  }
-  return { minX, minY, minZ, maxX, maxY, maxZ };
-}
-
-function fitDistanceForView(frames: FrameState[], viewName: string): number {
-  const b = boundsOf(frames);
-  const sx = Math.max(1, b.maxX - b.minX);
-  const sy = Math.max(1, b.maxY - b.minY);
-  const sz = Math.max(1, b.maxZ - b.minZ);
-  const radius = Math.max(1, Math.hypot(sx, sy, sz) * 0.5);
-  const vFov = (55 * Math.PI) / 180;
-  // Assume a potentially narrow viewer panel; use a conservative horizontal half-fov.
-  const assumedMinAspect = 0.55;
-  const hFovConservative = 2 * Math.atan(Math.tan(vFov / 2) * assumedMinAspect);
-  const minHalfFov = Math.max(0.08, Math.min(vFov / 2, hFovConservative / 2));
-  const dSphere = radius / Math.sin(minHalfFov);
-  const invTanV = 1 / Math.tan(vFov / 2);
-  const invTanH = 1 / Math.tan(hFovConservative / 2);
-  const m = 1.16; // fuller fit with minimal margin
-  const fitPlane = (width: number, height: number) =>
-    Math.max(width * 0.5 * invTanH, height * 0.5 * invTanV) * m;
-
-  if (viewName === "Top" || viewName === "Bottom") {
-    return Math.max(120, fitPlane(sx, sy));
-  }
-  if (viewName === "Front") {
-    return Math.max(120, fitPlane(sx, sz));
-  }
-  if (viewName === "Left" || viewName === "Right") {
-    return Math.max(120, fitPlane(sy, sz));
-  }
-  return Math.max(120, Math.max(radius * invTanV * m, dSphere * 1.15));
-}
-
-function cameraForView(frames: FrameState[], viewName: string): CameraState {
-  const center = centerOf(frames);
-  const d = fitDistanceForView(frames, viewName);
-  const presets: Record<string, Vec3> = {
-    Top: { x: center.x, y: center.y, z: center.z + d },
-    Bottom: { x: center.x, y: center.y, z: center.z - d },
-    Front: { x: center.x, y: center.y + d, z: center.z },
-    Left: { x: center.x + d, y: center.y, z: center.z },
-    Right: { x: center.x - d, y: center.y, z: center.z },
-  };
-  return {
-    target: center,
-    position: presets[viewName] ?? presets.Top,
-    zoom: 1,
-    viewName,
-  };
+  // 本地命名空间迁移失败时保持旧数据不动，避免阻塞应用启动。
 }
 
 function frameForLine(frames: FrameState[], lineNumber: number): FrameState | null {
@@ -734,62 +624,9 @@ function App() {
       return changed ? next : prev;
     });
   }, [isMac]);
-  const shortcutItems: Array<{ id: ShortcutId; label: string }> = [
-    { id: "openShortcuts", label: t("openShortcuts") },
-    { id: "openNc", label: t("shortcutOpenNc") },
-    { id: "saveFile", label: t("shortcutSaveFile") },
-    { id: "saveFileAs", label: t("shortcutSaveFileAs") },
-    { id: "toggleFiles", label: t("toggleFiles") },
-    { id: "toggleEditor", label: t("toggleEditor") },
-    { id: "toggleViewer", label: t("toggleViewer") },
-    { id: "toggleImmersiveViewer", label: t("toggleImmersiveViewer") },
-    { id: "refocus", label: t("refocus") },
-    { id: "viewTop", label: t("shortcutViewTop") },
-    { id: "viewFront", label: t("shortcutViewFront") },
-    { id: "viewLeft", label: t("shortcutViewLeft") },
-    { id: "viewRight", label: t("shortcutViewRight") },
-    { id: "viewBottom", label: t("shortcutViewBottom") },
-    { id: "panMode", label: t("panMode") },
-    { id: "rotateMode", label: t("rotateMode") },
-    { id: "zoomIn", label: t("zoomIn") },
-    { id: "zoomOut", label: t("zoomOut") },
-    { id: "toggleGrid", label: t("toggleGrid") },
-    { id: "toggleGizmo", label: t("toggleGizmo") },
-    { id: "toggleRapidPath", label: t("hideRapidPath") },
-    { id: "togglePathTooltip", label: t("shortcutToggleLegend") },
-    { id: "pathPrev", label: t("stepPrev") },
-    { id: "pathNext", label: t("stepNext") },
-  ];
-  const shortcutItemMap = useMemo(() => {
-    const out = {} as Record<ShortcutId, string>;
-    for (const item of shortcutItems) {
-      out[item.id] = item.label;
-    }
-    return out;
-  }, [shortcutItems]);
-  const shortcutGroups = useMemo(() => {
-    const descriptions = {
-      file: t("shortcutGroupFileDesc"),
-      panels: t("shortcutGroupPanelsDesc"),
-      viewer: t("shortcutGroupViewerDesc"),
-      path: t("shortcutGroupPathDesc"),
-    } as const;
-    const titles = {
-      file: t("shortcutGroupFile"),
-      panels: t("shortcutGroupPanels"),
-      viewer: t("shortcutGroupViewer"),
-      path: t("shortcutGroupPath"),
-    } as const;
-    return getShortcutGroups().map((group) => ({
-      ...group,
-      title: titles[group.id],
-      description: descriptions[group.id],
-      items: group.itemIds.map((id) => ({
-        id,
-        label: shortcutItemMap[id],
-      })),
-    }));
-  }, [shortcutItemMap, t]);
+  const shortcutItems = useMemo(() => buildShortcutItems(t), [t]);
+  const shortcutItemMap = useMemo(() => buildShortcutItemMap(shortcutItems), [shortcutItems]);
+  const shortcutGroups = useMemo(() => buildShortcutGroups(shortcutItemMap, t), [shortcutItemMap, t]);
   const updatePlayProgress = useCallback((value: number, force = false) => {
     playProgressRef.current = value;
     const now = performance.now();
@@ -979,6 +816,7 @@ function App() {
           }
         });
       } catch {
+        // 事件监听注册失败时仅跳过下载进度同步，不影响主界面可用性。
       }
     })();
     return () => {
@@ -1008,48 +846,17 @@ function App() {
     return "";
   }, [preparedUpdate, t, updateCandidate, updateDownloadInfo.percent, updateOverlayPhase]);
 
-  const visibleFiles = useMemo(() => {
-    const keyword = fileSearch.trim().toLowerCase();
-    const filtered = keyword
-      ? filesInFolder.filter((item) => item.fileName.toLowerCase().includes(keyword))
-      : filesInFolder.slice();
-
-    const sorted = filtered.sort((a, b) => {
-      const byNameAsc = a.fileName.localeCompare(
-        b.fileName,
-        currentLocale,
-        { numeric: true },
-      );
-      let result = 0;
-      if (fileSortField === "fileName") {
-        result = byNameAsc;
-      } else if (fileSortField === "createdAtMs") {
-        result = a.createdAtMs - b.createdAtMs;
-      } else {
-        result = a.sizeBytes - b.sizeBytes;
-      }
-      if (result === 0) {
-        // Secondary key is always filename asc for stable ordering.
-        result = byNameAsc;
-      }
-      if (fileSortField === "createdAtMs") {
-        // Default and expected behavior: created time first, filename second.
-        return fileSortOrder === "asc" ? result : (a.createdAtMs === b.createdAtMs ? result : -result);
-      }
-      return fileSortOrder === "asc" ? result : -result;
-    });
-
-    return sorted;
-  }, [currentLocale, fileSearch, filesInFolder, fileSortField, fileSortOrder]);
-  const visibleRecentFiles = useMemo(() => {
-    const keyword = fileSearch.trim().toLowerCase();
-    const filtered = keyword
-      ? recentFiles.filter((item) => item.fileName.toLowerCase().includes(keyword))
-      : recentFiles.slice();
-    return filtered
-      .sort((a, b) => b.lastOpenedAtMs - a.lastOpenedAtMs)
-      .slice(0, 10);
-  }, [fileSearch, recentFiles]);
+  const visibleFiles = useMemo(() => buildVisibleFiles({
+    currentLocale,
+    fileSearch,
+    filesInFolder,
+    fileSortField,
+    fileSortOrder,
+  }), [currentLocale, fileSearch, filesInFolder, fileSortField, fileSortOrder]);
+  const visibleRecentFiles = useMemo(
+    () => buildVisibleRecentFiles({ fileSearch, recentFiles }),
+    [fileSearch, recentFiles],
+  );
   const codeLines = useMemo(() => splitCodeLines(code), [code]);
   const viewerSourceSignature = useMemo(() => getViewerSourceSignature(frames), [frames]);
   const shortcutConflicts = useMemo(() => findShortcutConflicts(shortcuts), [shortcuts]);
@@ -1209,6 +1016,7 @@ function App() {
               }),
             );
           } catch {
+            // 保存窗口状态失败时不打断运行，下次仍可继续尝试持久化。
           }
         };
 
@@ -1242,6 +1050,7 @@ function App() {
               }
             }
           } catch {
+            // 旧窗口状态非法或显示器布局变化时，回退到系统默认窗口行为。
           } finally {
             workspaceWindowHydratedRef.current = true;
             void persistWindowState();
@@ -1257,6 +1066,7 @@ function App() {
           void persistWindowState();
         });
       } catch {
+        // 非 Tauri 或窗口 API 不可用时，直接标记已完成 hydration。
         workspaceWindowHydratedRef.current = true;
       }
     })();
