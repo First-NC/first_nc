@@ -1465,6 +1465,10 @@ function App() {
     monacoRef.current = monaco;
     editorRef.current = editor;
     registerNcLanguage(monaco);
+    const model = editor.getModel();
+    if (model) {
+      monaco.editor.setModelLanguage(model, "ncgcode");
+    }
     if (resolvedTheme === "light") {
       monaco.editor.setTheme("nc-light");
     } else if (resolvedTheme === "navy") {
@@ -1499,13 +1503,6 @@ function App() {
     if (showEditor && !fallbackEditor) return;
     handleEditorUnmount();
   }, [fallbackEditor, handleEditorUnmount, showEditor]);
-
-  useEffect(() => {
-    return () => {
-      editorCursorListenerRef.current?.dispose();
-      editorCursorListenerRef.current = null;
-    };
-  }, []);
 
   const localizeMonacoFindWidget = useCallback(() => {
     const root = editorRef.current?.getDomNode();

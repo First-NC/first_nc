@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Grid, Line, OrbitControls } from "@react-three/drei";
-import { Group, MOUSE, Quaternion, Raycaster, Vector2, Vector3 } from "three";
+import { ArrowHelper, Group, MOUSE, Quaternion, Raycaster, Vector2, Vector3 } from "three";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type WheelEvent as ReactWheelEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
@@ -88,6 +88,22 @@ function ToolPoint({
   segment: number[] | null;
   sceneScale: number;
 }) {
+  const helperRef = useRef<ArrowHelper | null>(null);
+  useLayoutEffect(() => {
+    const helper = helperRef.current;
+    if (!helper) return;
+    helper.renderOrder = 1001;
+    helper.traverse((child) => {
+      child.renderOrder = 1001;
+      const material = (child as { material?: { depthTest?: boolean; depthWrite?: boolean; transparent?: boolean; opacity?: number } }).material;
+      if (!material) return;
+      material.depthTest = false;
+      material.depthWrite = false;
+      material.transparent = false;
+      material.opacity = 1;
+    });
+  });
+
   if (!segment || segment.length < 6) return null;
   const endOffset = segment.length - 3;
   const startOffset = segment.length - 6;
@@ -110,17 +126,32 @@ function ToolPoint({
     segment[endOffset + 2] - dir.z * arrowLen,
   );
 
+  const tipRadius = Math.min(
+    Math.max(headWidth * 0.32, arrowLen * 0.18),
+    Math.max(1.2, sceneScale * 0.02),
+  );
+
   return (
-    <arrowHelper
-      args={[
-        dir,
-        origin,
-        arrowLen,
-        0xff3b30,
-        headLen,
-        headWidth,
-      ]}
-    />
+    <group renderOrder={1001}>
+      <arrowHelper
+        ref={helperRef}
+        args={[
+          dir,
+          origin,
+          arrowLen,
+          0xff1f1f,
+          headLen,
+          headWidth,
+        ]}
+      />
+      <mesh
+        position={[segment[endOffset], segment[endOffset + 1], segment[endOffset + 2]]}
+        renderOrder={1002}
+      >
+        <sphereGeometry args={[tipRadius, 16, 12]} />
+        <meshBasicMaterial color="#ff1f1f" depthTest={false} depthWrite={false} />
+      </mesh>
+    </group>
   );
 }
 

@@ -14,4 +14,9 @@ test("App resets editor linkage state only when the editor pane is actually unav
   assert.match(appSource, /setEditorReady\(false\)/);
   assert.match(appSource, /if \(showEditor && !fallbackEditor\) return/);
   assert.match(appSource, /handleEditorUnmount\(\)/);
+  assert.match(appSource, /setModelLanguage\(model, "ncgcode"\)/);
+  assert.doesNotMatch(
+    appSource,
+    /useEffect\(\(\) => \{\s*return \(\) => \{\s*editorCursorListenerRef\.current\?\.dispose\(\)/s,
+  );
 });
