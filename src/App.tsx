@@ -118,6 +118,7 @@ type NcEditorProps = {
   path: string;
   theme: string;
   value: string;
+  onBeforeMount?: (monaco: typeof Monaco) => void;
   onMount: (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => void;
   onChange: (value: string | undefined) => void;
 };
@@ -1447,7 +1448,7 @@ function App() {
         options: { isWholeLine: true, className: "current-line-highlight", glyphMarginClassName: "current-line-glyph" },
       },
     ]);
-  }, [currentFrame, isPlaying]);
+  }, [currentFrame, editorReady, isPlaying]);
 
   useEffect(() => {
     return () => {
@@ -2653,6 +2654,7 @@ function App() {
                   path={activeFile || loadedProgram?.filePath || "fnc://editor/current.nc"}
                   theme={resolvedTheme === "light" ? "nc-light" : (resolvedTheme === "navy" ? "nc-dark" : "nc-x-dark")}
                   value={code}
+                  onBeforeMount={registerNcLanguage}
                   onMount={onEditorMount}
                   onChange={(v) => setCode(v ?? "")}
                 />

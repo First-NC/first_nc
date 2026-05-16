@@ -24,11 +24,12 @@ export type NcEditorProps = {
   path: string;
   theme: string;
   value: string;
+  onBeforeMount?: (monaco: typeof Monaco) => void;
   onMount: (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => void;
   onChange: (value: string | undefined) => void;
 };
 
-export default function NcEditor({ path, theme, value, onMount, onChange }: NcEditorProps) {
+export default function NcEditor({ path, theme, value, onBeforeMount, onMount, onChange }: NcEditorProps) {
   return (
     <Editor
       path={path}
@@ -37,6 +38,7 @@ export default function NcEditor({ path, theme, value, onMount, onChange }: NcEd
       language="ncgcode"
       theme={theme}
       value={value}
+      beforeMount={onBeforeMount}
       onMount={onMount}
       onChange={onChange}
       options={resolveNcEditorOptions()}
