@@ -21,6 +21,7 @@ import { findClosestScreenSpaceSegmentInPools } from "../lib/viewerPick";
 import { areViewer3DPropsEqual, type Viewer3DProps } from "../lib/viewer3dProps";
 import { type SegmentRecord } from "../lib/viewerSegments";
 import { buildViewerPickCollections, buildViewerRenderBuffers, buildViewerSceneData } from "../lib/viewerSceneData";
+import { resolveToolPointArrowMetrics } from "../lib/viewerToolPoint";
 import { computeAnchoredZoomState } from "../lib/viewerZoom";
 
 type Vec3Like = { x: number; y: number; z: number };
@@ -99,18 +100,9 @@ function ToolPoint({
   if (segLen < 1e-8) return null;
 
   dir.normalize();
-  // Keep direction marker readable for tiny segments by enforcing a visible minimum size.
-  const minArrowLen = Math.max(6, sceneScale * 0.018);
-  const maxArrowLen = Math.max(18, sceneScale * 0.09);
-  let arrowLen = Math.max(minArrowLen, Math.min(segLen, maxArrowLen));
-  let headLen = Math.max(2.4, Math.min(arrowLen * 0.36, sceneScale * 0.03));
-  const headWidth = Math.max(1.4, Math.min(headLen * 0.72, sceneScale * 0.018));
-  const tinySegmentThreshold = Math.max(3.5, sceneScale * 0.01);
-  if (segLen <= tinySegmentThreshold) {
-    // Tiny segment: show only arrow head (no shaft/tail).
-    arrowLen = headLen;
-    headLen = arrowLen;
-  }
+  const metrics = resolveToolPointArrowMetrics(segLen, sceneScale);
+  if (!metrics) return null;
+  const { arrowLen, headLen, headWidth } = metrics;
   // Anchor arrow tip on the current point (segment end), not segment middle.
   const origin = new Vector3(
     segment[endOffset] - dir.x * arrowLen,

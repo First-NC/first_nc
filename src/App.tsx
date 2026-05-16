@@ -120,6 +120,7 @@ type NcEditorProps = {
   value: string;
   onBeforeMount?: (monaco: typeof Monaco) => void;
   onMount: (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => void;
+  onUnmount?: () => void;
   onChange: (value: string | undefined) => void;
 };
 
@@ -1487,6 +1488,14 @@ function App() {
     });
   };
 
+  const handleEditorUnmount = useCallback(() => {
+    editorCursorListenerRef.current?.dispose();
+    editorCursorListenerRef.current = null;
+    editorRef.current = null;
+    decoRef.current = [];
+    setEditorReady(false);
+  }, []);
+
   useEffect(() => {
     return () => {
       editorCursorListenerRef.current?.dispose();
@@ -2656,6 +2665,7 @@ function App() {
                   value={code}
                   onBeforeMount={registerNcLanguage}
                   onMount={onEditorMount}
+                  onUnmount={handleEditorUnmount}
                   onChange={(v) => setCode(v ?? "")}
                 />
               ) : !fallbackEditor ? (
