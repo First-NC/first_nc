@@ -13,12 +13,13 @@ export function resolveToolPointArrowMetrics(segmentLength: number, sceneScale: 
   const arrowLen = Math.min(segmentLength, sceneCap);
   const shortSegment = segmentLength <= safeSceneScale * 0.025;
   const headLen = Math.min(
-    arrowLen * (shortSegment ? 0.72 : 0.48),
-    Math.max(1.6, safeSceneScale * 0.036),
+    arrowLen * (shortSegment ? 0.9 : 0.56),
+    Math.max(2.2, safeSceneScale * 0.044),
   );
   const headWidth = Math.min(
-    Math.max(headLen * 1.05, arrowLen * (shortSegment ? 0.46 : 0.28)),
-    Math.max(1.2, safeSceneScale * 0.034),
+    arrowLen,
+    Math.max(headLen * 1.15, arrowLen * (shortSegment ? 0.82 : 0.38)),
+    Math.max(1.8, safeSceneScale * 0.05),
   );
 
   return {

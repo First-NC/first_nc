@@ -9,8 +9,8 @@ test("resolveToolPointArrowMetrics keeps the arrow within tiny highlighted segme
   assert.equal(metrics.arrowLen, 2);
   assert.ok(metrics.headLen <= metrics.arrowLen);
   assert.ok(metrics.headWidth <= metrics.arrowLen);
-  assert.ok(metrics.headLen >= metrics.arrowLen * 0.7);
-  assert.ok(metrics.headWidth >= metrics.arrowLen * 0.45);
+  assert.ok(metrics.headLen >= metrics.arrowLen * 0.85);
+  assert.ok(metrics.headWidth >= metrics.arrowLen * 0.8);
 });
 
 test("resolveToolPointArrowMetrics caps large arrows by scene scale", () => {

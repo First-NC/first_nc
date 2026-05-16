@@ -2,7 +2,6 @@ import Editor, { loader } from "@monaco-editor/react";
 import * as monacoApi from "monaco-editor";
 import type * as Monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import { useEffect } from "react";
 import { resolveNcEditorOptions } from "../lib/editorOptions";
 
 declare global {
@@ -27,15 +26,10 @@ export type NcEditorProps = {
   value: string;
   onBeforeMount?: (monaco: typeof Monaco) => void;
   onMount: (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => void;
-  onUnmount?: () => void;
   onChange: (value: string | undefined) => void;
 };
 
-export default function NcEditor({ path, theme, value, onBeforeMount, onMount, onUnmount, onChange }: NcEditorProps) {
-  useEffect(() => {
-    return () => onUnmount?.();
-  }, [onUnmount]);
-
+export default function NcEditor({ path, theme, value, onBeforeMount, onMount, onChange }: NcEditorProps) {
   return (
     <Editor
       path={path}
