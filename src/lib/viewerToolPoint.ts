@@ -11,13 +11,14 @@ export function resolveToolPointArrowMetrics(segmentLength: number, sceneScale: 
   // 箭头整体跟随当前高亮段长度，避免小圆弧上出现比红色段更大的方向标记。
   const sceneCap = Math.max(8, safeSceneScale * 0.09);
   const arrowLen = Math.min(segmentLength, sceneCap);
+  const shortSegment = segmentLength <= safeSceneScale * 0.025;
   const headLen = Math.min(
-    arrowLen * 0.42,
-    Math.max(1.2, safeSceneScale * 0.028),
+    arrowLen * (shortSegment ? 0.72 : 0.48),
+    Math.max(1.6, safeSceneScale * 0.036),
   );
   const headWidth = Math.min(
-    Math.max(headLen * 0.74, arrowLen * 0.22),
-    Math.max(0.8, safeSceneScale * 0.02),
+    Math.max(headLen * 1.05, arrowLen * (shortSegment ? 0.46 : 0.28)),
+    Math.max(1.2, safeSceneScale * 0.034),
   );
 
   return {
