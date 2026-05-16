@@ -18,9 +18,13 @@ https://api.firstnc.cn/api/v1/update/check
 
 ## 本地开发或调试
 
-如果要临时连接指定 IP 或域名的后端，在 `first_nc/.env.local` 中配置：
+Vite 8 之后不能使用 `local` 作为 mode 名，因为它会和 `.env.local` 的特殊后缀冲突。
+项目使用 `localenv` 作为本地开发 mode，默认脚本 `npm run dev` 会加载 `first_nc/.env.localenv`。
+
+如果要临时连接指定 IP 或域名的后端，在 `first_nc/.env.localenv` 中配置：
 
 ```bash
+VITE_APP_ENV=local
 VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
@@ -31,5 +35,4 @@ VITE_API_BASE_URL=http://192.168.1.20:8000
 VITE_API_BASE_URL=https://dev-api.example.com
 ```
 
-`.env.local` 只用于本机调试，不提交到仓库，避免把临时 IP 打进正式包。
-
+`.env.localenv` 只用于本机调试，正式构建仍然使用 `prod` mode 和 `https://api.firstnc.cn`。
