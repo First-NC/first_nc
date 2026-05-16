@@ -23,9 +23,9 @@ test("createAppConfig reads backend api base url from vite env", () => {
   assert.equal(config.apiBaseUrl, "https://dev-api.example.com");
 });
 
-test("createAppConfig falls back to local backend api address", () => {
+test("createAppConfig defaults packaged app to public backend api address", () => {
   const config = createAppConfig({});
 
   assert.equal(config.appEnv, "local");
-  assert.equal(config.apiBaseUrl, "http://127.0.0.1:8000");
+  assert.equal(config.apiBaseUrl, "https://api.firstnc.cn");
 });

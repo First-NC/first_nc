@@ -34,6 +34,7 @@ target
 !.env.localenv
 !.env.dev
 !.env.prod
+!.env.example
 Thumbs.db
 
 # Editor directories and files

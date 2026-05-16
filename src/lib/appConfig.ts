@@ -7,7 +7,7 @@ export type AppConfig = {
   apiBaseUrl: string;
 };
 
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+const DEFAULT_API_BASE_URL = "https://api.firstnc.cn";
 
 export function normalizeAppEnv(value: string | undefined): AppEnv {
   if (value === "dev" || value === "prod") return value;
