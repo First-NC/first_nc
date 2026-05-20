@@ -385,6 +385,7 @@ function App() {
   const framesRef = useRef<FrameState[]>([]);
   const lastEditorFollowTsRef = useRef(0);
   const playProgressRef = useRef(0);
+  const playProgressRangeRef = useRef<HTMLInputElement | null>(null);
   const prevViewerSourceSignatureRef = useRef("empty");
   const prevIsPlayingRef = useRef(false);
   const playProgressUiTsRef = useRef(0);
@@ -624,8 +625,17 @@ function App() {
   const shortcutItems = useMemo(() => buildShortcutItems(t), [t]);
   const shortcutItemMap = useMemo(() => buildShortcutItemMap(shortcutItems), [shortcutItems]);
   const shortcutGroups = useMemo(() => buildShortcutGroups(shortcutItemMap, t), [shortcutItemMap, t]);
+  const syncProgressRangeDom = useCallback((value: number, frameCount: number) => {
+    const range = playProgressRangeRef.current;
+    if (!range) return;
+    const max = Math.max(0, frameCount - 1);
+    const safe = Math.max(0, Math.min(max, value));
+    range.value = String(safe);
+    range.style.setProperty("--progress-pct", `${max > 0 ? (safe / max) * 100 : 0}%`);
+  }, []);
   const updatePlayProgress = useCallback((value: number, force = false) => {
     playProgressRef.current = value;
+    syncProgressRangeDom(value, framesRef.current.length);
     const now = performance.now();
     if (
       force
@@ -636,7 +646,7 @@ function App() {
       playProgressUiTsRef.current = now;
       setPlayProgress(value);
     }
-  }, []);
+  }, [syncProgressRangeDom]);
   const setShortcutValue = useCallback((id: ShortcutId, value: string) => {
     setShortcuts((prev) => ({ ...prev, [id]: value }));
   }, []);
@@ -880,7 +890,8 @@ function App() {
 
   useEffect(() => {
     framesRef.current = frames;
-  }, [frames]);
+    syncProgressRangeDom(playProgressRef.current, frames.length);
+  }, [frames, syncProgressRangeDom]);
 
   useEffect(() => {
     if (!startupMaskVisible || !startupMaskConfig.visible) return;
@@ -2782,16 +2793,12 @@ function App() {
                 <input
                   id="viewer-progress"
                   className="viewer-progress-range"
+                  ref={playProgressRangeRef}
                   type="range"
                   min={0}
                   max={Math.max(0, frames.length - 1)}
                   step={0.01}
-                  value={Math.max(0, Math.min(frames.length - 1, playProgress))}
-                  style={{
-                    "--progress-pct": `${frames.length > 1
-                      ? (Math.max(0, Math.min(frames.length - 1, playProgress)) / (frames.length - 1)) * 100
-                      : 0}%`,
-                  } as CSSProperties}
+                  defaultValue={0}
                   onChange={(e) => {
                     const raw = Number(e.target.value);
                     const idx = Math.max(0, Math.min(frames.length - 1, Math.round(raw)));
@@ -2802,7 +2809,7 @@ function App() {
                   }}
                   disabled={frames.length < 2}
                 />
-                <span>{Math.min(frames.length, (currentFrame?.index ?? 0) + 1)} / {frames.length}</span>
+                <span>{Math.min(frames.length, Math.floor(playProgress) + 1)} / {frames.length}</span>
               </div>
             </div>
           </section>
