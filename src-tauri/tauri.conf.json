@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "First NC",
   "mainBinaryName": "FirstNC",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "identifier": "com.firstnc.desktop",
   "build": {
     "frontendDist": "../dist",

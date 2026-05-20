@@ -1,6 +1,6 @@
 [package]
 name = "first-nc"
-version = "1.2.4"
+version = "1.2.5"
 description = "First NC Cross-Platform"
 authors = ["First NC Team"]
 license = ""
