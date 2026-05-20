@@ -65,3 +65,28 @@ export function advancePlaybackProgress(
   const currentDistance = resolvePlaybackDistance(currentProgress, distances);
   return resolvePlaybackProgress(currentDistance + (deltaMs * unitsPerSecond) / 1000, distances);
 }
+
+export function resolvePlaybackFrame(progress: number, frames: FrameState[]): FrameState | null {
+  if (!frames.length) return null;
+  const maxIndex = frames.length - 1;
+  const safeProgress = Math.max(0, Math.min(maxIndex, progress));
+  const lowerIndex = Math.floor(safeProgress);
+  const upperIndex = Math.min(maxIndex, lowerIndex + 1);
+  const lower = frames[lowerIndex];
+  const upper = frames[upperIndex];
+  if (!lower || !upper || lowerIndex === upperIndex) return lower ?? upper ?? null;
+
+  const ratio = safeProgress - lowerIndex;
+  return {
+    ...upper,
+    index: safeProgress,
+    lineNumber: ratio > 0 ? upper.lineNumber : lower.lineNumber,
+    position: {
+      x: lower.position.x + (upper.position.x - lower.position.x) * ratio,
+      y: lower.position.y + (upper.position.y - lower.position.y) * ratio,
+      z: lower.position.z + (upper.position.z - lower.position.z) * ratio,
+    },
+    motion: upper.motion ?? lower.motion,
+    axisDomain: upper.axisDomain ?? lower.axisDomain,
+  };
+}

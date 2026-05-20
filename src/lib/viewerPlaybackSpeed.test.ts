@@ -6,6 +6,7 @@ import {
   buildPlaybackDistanceMap,
   playbackUnitsPerSecond,
   resolvePlaybackDistance,
+  resolvePlaybackFrame,
   resolvePlaybackProgress,
 } from "./viewerPlaybackSpeed.ts";
 
@@ -45,4 +46,16 @@ test("advancePlaybackProgress makes speed modes visually distinct over the same 
 
   assert.ok(standard >= low * 5);
   assert.ok(high >= standard * 5);
+});
+
+test("resolvePlaybackFrame interpolates position between sparse machining frames", () => {
+  const frame = resolvePlaybackFrame(0.25, [
+    makeFrame(0, 0),
+    makeFrame(1, 100),
+  ]);
+
+  assert.ok(frame);
+  assert.equal(frame.index, 0.25);
+  assert.equal(frame.position.x, 25);
+  assert.equal(frame.lineNumber, 2);
 });

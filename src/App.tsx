@@ -41,7 +41,7 @@ import { enterImmersivePanes, exitImmersivePanes, toggleImmersiveDrawer } from "
 import { resolveImmersiveSidebarLeft } from "./lib/immersiveSidebar";
 import { clampPaneWidth } from "./lib/paneWidths";
 import { getViewerSourceSignature, shouldClearTransientViewerState } from "./lib/viewerPlaybackState";
-import { advancePlaybackProgress, buildPlaybackDistanceMap, playbackUnitsPerSecond, type PlaybackSpeedMode } from "./lib/viewerPlaybackSpeed";
+import { advancePlaybackProgress, buildPlaybackDistanceMap, playbackUnitsPerSecond, resolvePlaybackFrame, type PlaybackSpeedMode } from "./lib/viewerPlaybackSpeed";
 import { applyThemePaletteToDom, getBootThemePalette, resolveBootTheme } from "./lib/themeBoot";
 import { getStartupMaskConfig } from "./lib/startupMask";
 import { migrateStorageNamespace, STORAGE_KEYS } from "./lib/storageKeys";
@@ -1386,7 +1386,6 @@ function App() {
     let rafId = 0;
     let lastTs = performance.now();
     let progress = Math.max(0, Math.min(frames.length - 1, playProgressRef.current));
-    let lastIndex = Math.floor(progress);
 
     const tick = (ts: number) => {
       const dt = Math.max(0, ts - lastTs);
@@ -1400,11 +1399,8 @@ function App() {
         return;
       }
       updatePlayProgress(progress);
-      const index = Math.floor(progress);
-      if (index !== lastIndex) {
-        lastIndex = index;
-        setCurrentFrame(frames[index]);
-      }
+      const interpolatedFrame = resolvePlaybackFrame(progress, frames);
+      if (interpolatedFrame) setCurrentFrame(interpolatedFrame);
       rafId = window.requestAnimationFrame(tick);
     };
 
