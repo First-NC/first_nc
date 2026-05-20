@@ -29,6 +29,18 @@ VITE_APP_ENV=local
 VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
+桌面壳本地联调使用：
+
+```bash
+npm run tauri:dev:local
+```
+
+默认桌面壳开发仍然走生产后端：
+
+```bash
+npm run tauri:dev
+```
+
 也可以指定局域网或测试域名：
 
 ```bash

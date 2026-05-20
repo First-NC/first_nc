@@ -17,6 +17,7 @@
     "build:prod": "tsc -b && vite build --mode prod",
     "tauri": "node ./scripts/sync-version.mjs && node ./node_modules/@tauri-apps/cli/tauri.js",
     "tauri:dev": "node ./scripts/sync-version.mjs && node ./node_modules/@tauri-apps/cli/tauri.js dev",
+    "tauri:dev:local": "node ./scripts/sync-version.mjs && node ./node_modules/@tauri-apps/cli/tauri.js dev --config src-tauri/tauri.local.conf.json",
     "tauri:build": "node ./scripts/sync-version.mjs && node ./node_modules/@tauri-apps/cli/tauri.js build",
     "tauri:build:win": "node ./scripts/package-platform.mjs win",
     "tauri:build:linux": "node ./scripts/package-platform.mjs linux",
