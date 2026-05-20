@@ -384,6 +384,11 @@ html, body, #root { margin: 0; width: 100%; height: 100%; background: var(--bg);
   position: relative;
 }
 
+.view-menu[open],
+.help-menu:has(.help-menu-list) {
+  z-index: 420;
+}
+
 .view-menu summary {
   list-style: none;
 }
@@ -398,7 +403,7 @@ html, body, #root { margin: 0; width: 100%; height: 100%; background: var(--bg);
   left: 50%;
   right: auto;
   transform: translateX(-50%);
-  z-index: 260;
+  z-index: 430;
   width: max-content;
   justify-items: stretch;
   min-width: 0;
@@ -412,8 +417,14 @@ html, body, #root { margin: 0; width: 100%; height: 100%; background: var(--bg);
   overflow: visible;
 }
 
-.top-chrome.immersive .view-menu-list {
-  z-index: 320;
+.top-chrome.immersive .view-menu[open],
+.top-chrome.immersive .help-menu:has(.help-menu-list) {
+  z-index: 1420;
+}
+
+.top-chrome.immersive .view-menu-list,
+.top-chrome.immersive .help-menu-list {
+  z-index: 1430;
 }
 
 .view-menu-list button {
@@ -472,7 +483,7 @@ html, body, #root { margin: 0; width: 100%; height: 100%; background: var(--bg);
   left: 50%;
   right: auto;
   transform: translateX(-50%);
-  z-index: 260;
+  z-index: 430;
   width: max-content;
   justify-items: stretch;
   min-width: 0;
