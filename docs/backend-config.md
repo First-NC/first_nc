@@ -19,7 +19,8 @@ https://api.firstnc.cn/api/v1/update/check
 ## 本地开发或调试
 
 Vite 8 之后不能使用 `local` 作为 mode 名，因为它会和 `.env.local` 的特殊后缀冲突。
-项目使用 `localenv` 作为本地开发 mode，默认脚本 `npm run dev` 会加载 `first_nc/.env.localenv`。
+项目使用 `localenv` 作为本地联调 mode，显式执行 `npm run dev:local` 才会加载 `first_nc/.env.localenv`。
+默认 `npm run dev` 使用 `prod` mode，仍然访问 `https://api.firstnc.cn`。
 
 如果要临时连接指定 IP 或域名的后端，在 `first_nc/.env.localenv` 中配置：
 

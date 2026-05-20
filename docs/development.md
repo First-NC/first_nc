@@ -27,7 +27,8 @@ cd src-tauri && cargo check
 
 对应后端地址：
 
-- `local` -> `http://127.0.0.1:8000`
+- 默认 `npm run dev` -> `https://api.firstnc.cn`
+- 显式 `npm run dev:local` -> `http://127.0.0.1:8000`
 - `dev` -> `https://test-api.firstnc.cn`
 - `prod` -> `https://api.firstnc.cn`
 

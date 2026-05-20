@@ -7,7 +7,7 @@
     "sync:version": "node ./scripts/sync-version.mjs",
     "predev": "npm run sync:version",
     "prebuild": "npm run sync:version",
-    "dev": "vite --mode localenv",
+    "dev": "vite --mode prod",
     "dev:local": "vite --mode localenv",
     "dev:dev": "vite --mode dev",
     "dev:prod": "vite --mode prod",
