@@ -30,7 +30,7 @@ cd src-tauri && cargo check
 - 默认 `npm run dev` -> `https://api.firstnc.cn`
 - 显式 `npm run dev:local` -> `http://127.0.0.1:8000`
 - 默认 `npm run tauri:dev` -> `https://api.firstnc.cn`
-- 显式 `npm run tauri:dev:local` -> `http://127.0.0.1:8000`
+- 显式 `npm run tauri:dev:local` -> `http://127.0.0.1:8000`，前端端口使用 `5174`
 - `dev` -> `https://test-api.firstnc.cn`
 - `prod` -> `https://api.firstnc.cn`
 

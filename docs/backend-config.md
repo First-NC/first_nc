@@ -35,6 +35,8 @@ VITE_API_BASE_URL=http://127.0.0.1:8000
 npm run tauri:dev:local
 ```
 
+本地桌面壳会使用独立前端端口 `5174`，避免和默认 `tauri:dev` 的 `5173` 冲突。
+
 默认桌面壳开发仍然走生产后端：
 
 ```bash
