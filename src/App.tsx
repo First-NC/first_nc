@@ -387,6 +387,7 @@ function App() {
   const editorPaneRef = useRef<HTMLElement | null>(null);
   const editorHostRef = useRef<HTMLDivElement | null>(null);
   const decoRef = useRef<string[]>([]);
+  const editorHighlightedLineRef = useRef<number | null>(null);
   const parseDebounceRef = useRef<number | null>(null);
   const editorFollowResetTimerRef = useRef<number | null>(null);
   const suppressCursorSyncRef = useRef(false);
@@ -659,8 +660,8 @@ function App() {
     const now = performance.now();
     if (
       force
-      || Math.abs(value - playProgressUiValueRef.current) >= 0.18
-      || now - playProgressUiTsRef.current >= 33
+      || Math.abs(value - playProgressUiValueRef.current) >= 1
+      || now - playProgressUiTsRef.current >= 120
     ) {
       playProgressUiValueRef.current = value;
       playProgressUiTsRef.current = now;
@@ -1444,19 +1445,21 @@ function App() {
     if (!editorRef.current || !monacoRef.current) return;
     if (!currentFrame) {
       decoRef.current = editorRef.current.deltaDecorations(decoRef.current, []);
+      editorHighlightedLineRef.current = null;
       return;
     }
+    const targetLine = currentFrame.lineNumber;
     const now = performance.now();
     const shouldFollowCursor = !isPlaying || (now - lastEditorFollowTsRef.current > 120);
     if (shouldFollowCursor) {
       const currentLine = editorRef.current.getPosition()?.lineNumber ?? -1;
-      if (currentLine !== currentFrame.lineNumber) {
+      if (currentLine !== targetLine) {
         suppressCursorSyncRef.current = true;
-        editorRef.current.setPosition({ lineNumber: currentFrame.lineNumber, column: 1 });
+        editorRef.current.setPosition({ lineNumber: targetLine, column: 1 });
         if (isPlaying) {
-          editorRef.current.revealLineNearTop(currentFrame.lineNumber);
+          editorRef.current.revealLineNearTop(targetLine);
         } else {
-          editorRef.current.revealLineInCenter(currentFrame.lineNumber);
+          editorRef.current.revealLineInCenter(targetLine);
         }
         if (editorFollowResetTimerRef.current) {
           window.clearTimeout(editorFollowResetTimerRef.current);
@@ -1467,9 +1470,11 @@ function App() {
       }
       lastEditorFollowTsRef.current = now;
     }
+    if (editorHighlightedLineRef.current === targetLine && decoRef.current.length > 0) return;
+    editorHighlightedLineRef.current = targetLine;
     decoRef.current = editorRef.current.deltaDecorations(decoRef.current, [
       {
-        range: new monacoRef.current.Range(currentFrame.lineNumber, 1, currentFrame.lineNumber, 1),
+        range: new monacoRef.current.Range(targetLine, 1, targetLine, 1),
         options: { isWholeLine: true, className: "current-line-highlight", glyphMarginClassName: "current-line-glyph" },
       },
     ]);
@@ -1521,6 +1526,7 @@ function App() {
     editorCursorListenerRef.current = null;
     editorRef.current = null;
     decoRef.current = [];
+    editorHighlightedLineRef.current = null;
     setEditorReady(false);
   }, []);
 

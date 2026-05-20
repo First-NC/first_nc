@@ -53,6 +53,22 @@ test("resolveViewerFocusSegment falls back to the nearest visible segment when t
   ]);
 });
 
+test("resolveViewerFocusSegment follows the interpolated machining playhead during playback", () => {
+  const frames = [
+    makeFrame(0, 1, 0, 0, 0),
+    makeFrame(1, 2, 100, 0, 0),
+  ];
+  const playhead: FrameState = {
+    ...frames[1],
+    index: 0.25,
+    position: { x: 25, y: 0, z: 0 },
+  };
+
+  assert.deepEqual(resolveViewerFocusSegment(frames, playhead, null), [
+    frames[0].position,
+    playhead.position,
+  ]);
+});
 
 test("resolveViewerFocusPointBuffer flattens the highlighted path into a continuous line payload", () => {
   const frames = [

@@ -1,6 +1,10 @@
 import type { FrameState, Vec3 } from "../types";
 import type { SegmentRecord } from "./viewerSegments";
 
+function distance(a: Vec3, b: Vec3): number {
+  return Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+}
+
 export function resolveViewerFocusSegment(
   frames: FrameState[],
   markerFrame: FrameState | null,
@@ -16,12 +20,18 @@ export function resolveViewerFocusSegment(
     if (aIdx < 0 || bIdx < 0 || aIdx >= frames.length || bIdx >= frames.length) return null;
     const a = frames[aIdx].position;
     const b = frames[bIdx].position;
-    const len = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
-    if (len < 1e-8) return null;
+    if (distance(a, b) < 1e-8) return null;
     return [a, b];
   };
 
-  // 同一 NC 行可能被圆弧插补拆成多个 3D 片段，高亮时应显示整行路径。
+  if (!Number.isInteger(markerIdx)) {
+    const lowerIndex = Math.max(0, Math.min(frames.length - 1, Math.floor(markerIdx)));
+    const lower = frames[lowerIndex]?.position;
+    const current = markerFrame.position;
+    if (lower && distance(lower, current) >= 1e-8) return [lower, current];
+  }
+
+  // 手动选中/点击时，同一 NC 行可能被圆弧插补拆成多个片段，应显示整行路径。
   const targetLine = pickedSegment?.endFrame.lineNumber ?? markerFrame.lineNumber;
   const sameLineIndices: number[] = [];
   for (let i = 1; i < frames.length; i += 1) {
@@ -33,12 +43,7 @@ export function resolveViewerFocusSegment(
     for (const index of sameLineIndices) {
       const previous = points[points.length - 1];
       const current = frames[index].position;
-      const len = Math.hypot(
-        current.x - previous.x,
-        current.y - previous.y,
-        current.z - previous.z,
-      );
-      if (len >= 1e-8) points.push(current);
+      if (distance(previous, current) >= 1e-8) points.push(current);
     }
     if (points.length > 1) return points;
   }
