@@ -41,7 +41,15 @@ import { enterImmersivePanes, exitImmersivePanes, toggleImmersiveDrawer } from "
 import { resolveImmersiveSidebarLeft } from "./lib/immersiveSidebar";
 import { clampPaneWidth } from "./lib/paneWidths";
 import { getViewerSourceSignature, shouldClearTransientViewerState } from "./lib/viewerPlaybackState";
-import { advancePlaybackProgress, buildPlaybackDistanceMap, playbackUnitsPerSecond, resolvePlaybackFrame, type PlaybackSpeedMode } from "./lib/viewerPlaybackSpeed";
+import {
+  advancePlaybackProgress,
+  buildPlaybackDistanceMap,
+  playbackUnitsPerSecond,
+  resolvePlaybackDistance,
+  resolvePlaybackFrame,
+  resolvePlaybackProgress,
+  type PlaybackSpeedMode,
+} from "./lib/viewerPlaybackSpeed";
 import { applyThemePaletteToDom, getBootThemePalette, resolveBootTheme } from "./lib/themeBoot";
 import { getStartupMaskConfig } from "./lib/startupMask";
 import { migrateStorageNamespace, STORAGE_KEYS } from "./lib/storageKeys";
@@ -386,6 +394,7 @@ function App() {
   const lastEditorFollowTsRef = useRef(0);
   const playProgressRef = useRef(0);
   const playProgressRangeRef = useRef<HTMLInputElement | null>(null);
+  const playbackDistanceMapRef = useRef<number[]>([]);
   const prevViewerSourceSignatureRef = useRef("empty");
   const prevIsPlayingRef = useRef(false);
   const playProgressUiTsRef = useRef(0);
@@ -628,10 +637,21 @@ function App() {
   const syncProgressRangeDom = useCallback((value: number, frameCount: number) => {
     const range = playProgressRangeRef.current;
     if (!range) return;
-    const max = Math.max(0, frameCount - 1);
-    const safe = Math.max(0, Math.min(max, value));
+    const distances = playbackDistanceMapRef.current;
+    const totalDistance = distances[distances.length - 1] ?? 0;
+    if (totalDistance > 1e-8) {
+      const distance = resolvePlaybackDistance(value, distances);
+      range.max = String(totalDistance);
+      range.value = String(distance);
+      range.style.setProperty("--progress-pct", `${(distance / totalDistance) * 100}%`);
+      return;
+    }
+
+    const maxFrame = Math.max(0, frameCount - 1);
+    const safe = Math.max(0, Math.min(maxFrame, value));
+    range.max = String(maxFrame);
     range.value = String(safe);
-    range.style.setProperty("--progress-pct", `${max > 0 ? (safe / max) * 100 : 0}%`);
+    range.style.setProperty("--progress-pct", `${maxFrame > 0 ? (safe / maxFrame) * 100 : 0}%`);
   }, []);
   const updatePlayProgress = useCallback((value: number, force = false) => {
     playProgressRef.current = value;
@@ -867,6 +887,7 @@ function App() {
   const codeLines = useMemo(() => splitCodeLines(code), [code]);
   const viewerSourceSignature = useMemo(() => getViewerSourceSignature(frames), [frames]);
   const playbackDistanceMap = useMemo(() => buildPlaybackDistanceMap(frames), [frames]);
+  const playbackTotalDistance = playbackDistanceMap[playbackDistanceMap.length - 1] ?? 0;
   const shortcutConflicts = useMemo(() => findShortcutConflicts(shortcuts), [shortcuts]);
   const currentNcLineText = useMemo(() => {
     if (!currentFrame || !codeLines.length) return "-";
@@ -890,8 +911,9 @@ function App() {
 
   useEffect(() => {
     framesRef.current = frames;
+    playbackDistanceMapRef.current = playbackDistanceMap;
     syncProgressRangeDom(playProgressRef.current, frames.length);
-  }, [frames, syncProgressRangeDom]);
+  }, [frames, playbackDistanceMap, syncProgressRangeDom]);
 
   useEffect(() => {
     if (!startupMaskVisible || !startupMaskConfig.visible) return;
@@ -1108,13 +1130,12 @@ function App() {
   }, [resolvedTheme]);
 
   useEffect(() => {
-    if (editorReady || fallbackEditor) return;
+    if (editorReady || fallbackEditor || !showEditor || NcEditorComponent) return;
     const timer = window.setTimeout(() => {
-      setFallbackEditor(true);
-      setStatus((prev) => `${prev} | Monaco loading timeout, switched to fallback editor`);
+      setStatus((prev) => `${prev} | Monaco is still loading`);
     }, 5000);
     return () => window.clearTimeout(timer);
-  }, [editorReady, fallbackEditor]);
+  }, [NcEditorComponent, editorReady, fallbackEditor, showEditor]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
@@ -2796,13 +2817,16 @@ function App() {
                   ref={playProgressRangeRef}
                   type="range"
                   min={0}
-                  max={Math.max(0, frames.length - 1)}
+                  max={playbackTotalDistance > 1e-8 ? playbackTotalDistance : Math.max(0, frames.length - 1)}
                   step={0.01}
                   defaultValue={0}
                   onChange={(e) => {
                     const raw = Number(e.target.value);
-                    const idx = Math.max(0, Math.min(frames.length - 1, Math.round(raw)));
-                    updatePlayProgress(raw, true);
+                    const progress = playbackTotalDistance > 1e-8
+                      ? resolvePlaybackProgress(raw, playbackDistanceMap)
+                      : raw;
+                    const idx = Math.max(0, Math.min(frames.length - 1, Math.round(progress)));
+                    updatePlayProgress(progress, true);
                     setPathNavActive(true);
                     setHoverFrame(null);
                     selectFrameByIndex(idx);
