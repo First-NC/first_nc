@@ -41,6 +41,7 @@ import { enterImmersivePanes, exitImmersivePanes, toggleImmersiveDrawer } from "
 import { resolveImmersiveSidebarLeft } from "./lib/immersiveSidebar";
 import { clampPaneWidth } from "./lib/paneWidths";
 import { getViewerSourceSignature, shouldClearTransientViewerState } from "./lib/viewerPlaybackState";
+import { advancePlaybackProgress, buildPlaybackDistanceMap, playbackUnitsPerSecond, type PlaybackSpeedMode } from "./lib/viewerPlaybackSpeed";
 import { applyThemePaletteToDom, getBootThemePalette, resolveBootTheme } from "./lib/themeBoot";
 import { getStartupMaskConfig } from "./lib/startupMask";
 import { migrateStorageNamespace, STORAGE_KEYS } from "./lib/storageKeys";
@@ -80,7 +81,7 @@ import {
 import { HELP_MENU_ACTION_ORDER, UTILITY_MENU_CONTROL_ORDER } from "./lib/topMenu";
 
 type ThemeMode = "system" | "light" | "navy" | "xdark";
-type SpeedMode = "Low" | "Standard" | "High";
+type SpeedMode = PlaybackSpeedMode;
 type InteractionMode = "pan" | "rotate";
 type RecentFileItem = { path: string; fileName: string; lastOpenedAtMs: number };
 type TooltipMode = "below-center" | "below-right" | "side-right";
@@ -123,11 +124,6 @@ type NcEditorProps = {
   onChange: (value: string | undefined) => void;
 };
 
-const speedPointsPerSecond: Record<SpeedMode, number> = {
-  Low: 60,
-  Standard: 160,
-  High: 360,
-};
 const STORAGE_THEME_KEY = STORAGE_KEYS.themeMode;
 const STORAGE_LANG_KEY = STORAGE_KEYS.lang;
 const STORAGE_SHOW_FILES_KEY = STORAGE_KEYS.showFiles;
@@ -860,6 +856,7 @@ function App() {
   );
   const codeLines = useMemo(() => splitCodeLines(code), [code]);
   const viewerSourceSignature = useMemo(() => getViewerSourceSignature(frames), [frames]);
+  const playbackDistanceMap = useMemo(() => buildPlaybackDistanceMap(frames), [frames]);
   const shortcutConflicts = useMemo(() => findShortcutConflicts(shortcuts), [shortcuts]);
   const currentNcLineText = useMemo(() => {
     if (!currentFrame || !codeLines.length) return "-";
@@ -1394,7 +1391,7 @@ function App() {
     const tick = (ts: number) => {
       const dt = Math.max(0, ts - lastTs);
       lastTs = ts;
-      progress += (dt * speedPointsPerSecond[speed]) / 1000;
+      progress = advancePlaybackProgress(progress, dt, playbackUnitsPerSecond[speed], playbackDistanceMap);
       if (progress >= frames.length - 1) {
         progress = frames.length - 1;
         updatePlayProgress(progress, true);
@@ -1413,7 +1410,7 @@ function App() {
 
     rafId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(rafId);
-  }, [isPlaying, frames, speed, updatePlayProgress]);
+  }, [isPlaying, frames, playbackDistanceMap, speed, updatePlayProgress]);
 
   useEffect(() => {
     if (!editorRef.current || !monacoRef.current) return;

@@ -21,10 +21,11 @@ export function resolveViewerFocusSegment(
     return [a, b];
   };
 
-  const line = markerFrame.lineNumber;
+  // 同一 NC 行可能被圆弧插补拆成多个 3D 片段，高亮时应显示整行路径。
+  const targetLine = pickedSegment?.endFrame.lineNumber ?? markerFrame.lineNumber;
   const sameLineIndices: number[] = [];
   for (let i = 1; i < frames.length; i += 1) {
-    if (frames[i].lineNumber === line) sameLineIndices.push(i);
+    if (frames[i].lineNumber === targetLine) sameLineIndices.push(i);
   }
   if (sameLineIndices.length > 0) {
     const startIndex = Math.max(0, sameLineIndices[0] - 1);
@@ -37,9 +38,7 @@ export function resolveViewerFocusSegment(
         current.y - previous.y,
         current.z - previous.z,
       );
-      if (len >= 1e-8) {
-        points.push(current);
-      }
+      if (len >= 1e-8) points.push(current);
     }
     if (points.length > 1) return points;
   }
