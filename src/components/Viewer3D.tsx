@@ -21,7 +21,7 @@ import { findClosestScreenSpaceSegmentInPools } from "../lib/viewerPick";
 import { areViewer3DPropsEqual, type Viewer3DProps } from "../lib/viewer3dProps";
 import { type SegmentRecord } from "../lib/viewerSegments";
 import { buildViewerPickCollections, buildViewerRenderBuffers, buildViewerSceneData } from "../lib/viewerSceneData";
-import { resolveToolPointArrowMetrics } from "../lib/viewerToolPoint";
+import { resolveScreenSpaceArrowMetrics } from "../lib/viewerToolPoint";
 import { computeAnchoredZoomState } from "../lib/viewerZoom";
 
 type Vec3Like = { x: number; y: number; z: number };
@@ -83,12 +83,12 @@ function clampPitchAwayFromPole(offset: Vector3, rightAxis: Vector3, desiredPitc
 
 function ToolPoint({
   segment,
-  sceneScale,
 }: {
   segment: number[] | null;
-  sceneScale: number;
 }) {
   const helperRef = useRef<ArrowHelper | null>(null);
+  const { camera, size } = useThree();
+
   useLayoutEffect(() => {
     const helper = helperRef.current;
     if (!helper) return;
@@ -116,41 +116,28 @@ function ToolPoint({
   if (segLen < 1e-8) return null;
 
   dir.normalize();
-  const metrics = resolveToolPointArrowMetrics(segLen, sceneScale);
+
+  const endPoint = new Vector3(segment[endOffset], segment[endOffset + 1], segment[endOffset + 2]);
+  const cameraDistance = camera.position.distanceTo(endPoint);
+  const cam = camera as PerspectiveCamera;
+  const fov = ((cam.fov ?? 55) * Math.PI) / 180;
+
+  const metrics = resolveScreenSpaceArrowMetrics(cameraDistance, fov, size.height);
   if (!metrics) return null;
   const { arrowLen, headLen, headWidth } = metrics;
-  // Anchor arrow tip on the current point (segment end), not segment middle.
+
   const origin = new Vector3(
     segment[endOffset] - dir.x * arrowLen,
     segment[endOffset + 1] - dir.y * arrowLen,
     segment[endOffset + 2] - dir.z * arrowLen,
   );
 
-  const tipRadius = Math.min(
-    Math.max(headWidth * 0.32, arrowLen * 0.18),
-    Math.max(1.2, sceneScale * 0.02),
-  );
-
   return (
     <group renderOrder={1001}>
       <arrowHelper
         ref={helperRef}
-        args={[
-          dir,
-          origin,
-          arrowLen,
-          0xff1f1f,
-          headLen,
-          headWidth,
-        ]}
+        args={[dir, origin, arrowLen, 0xff1f1f, headLen, headWidth]}
       />
-      <mesh
-        position={[segment[endOffset], segment[endOffset + 1], segment[endOffset + 2]]}
-        renderOrder={1002}
-      >
-        <sphereGeometry args={[tipRadius, 16, 12]} />
-        <meshBasicMaterial color="#ff1f1f" depthTest={false} depthWrite={false} />
-      </mesh>
     </group>
   );
 }
@@ -634,16 +621,14 @@ const StaticPathGroup = memo(function StaticPathGroup({
 const FocusOverlay = memo(function FocusOverlay({
   focusSegment,
   focusWidth,
-  sceneScale,
 }: {
   focusSegment: number[] | null;
   focusWidth: number;
-  sceneScale: number;
 }) {
   return (
     <>
       <FocusSegment points={focusSegment} lineWidth={focusWidth} />
-      <ToolPoint segment={focusSegment} sceneScale={sceneScale} />
+      <ToolPoint segment={focusSegment} />
     </>
   );
 });
@@ -1275,7 +1260,7 @@ function Viewer3DInner({
           showRapidPath={showRapidPath}
           lineColor={lineColor}
         />
-        <FocusOverlay focusSegment={focusSegment} focusWidth={focusWidth} sceneScale={sceneScale} />
+        <FocusOverlay focusSegment={focusSegment} focusWidth={focusWidth} />
         <MemoRayPickController
           sampledCutSegments={pickCollections.pickCutSegments}
           sampledRapidSegments={showRapidPath ? pickCollections.pickRapidSegments : []}

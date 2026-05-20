@@ -412,6 +412,10 @@ html, body, #root { margin: 0; width: 100%; height: 100%; background: var(--bg);
   overflow: visible;
 }
 
+.top-chrome.immersive .view-menu-list {
+  z-index: 320;
+}
+
 .view-menu-list button {
   width: 100%;
   max-width: none;
@@ -677,12 +681,13 @@ label { font-size: 13px; color: var(--muted); display: inline-flex; align-items:
   transform: translateY(0);
   opacity: 1;
   pointer-events: auto;
+  z-index: 300;
 }
 
 .top-chrome.immersive .menu-bar,
 .top-chrome.immersive .tool-bar {
-  backdrop-filter: blur(10px);
-  background: color-mix(in oklab, var(--panel) 90%, transparent);
+  backdrop-filter: none;
+  background: var(--panel);
   box-shadow: 0 16px 32px rgba(2, 6, 23, 0.22);
 }
 

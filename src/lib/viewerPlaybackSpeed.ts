@@ -3,9 +3,9 @@ import type { FrameState } from "../types";
 export type PlaybackSpeedMode = "Low" | "Standard" | "High";
 
 export const playbackUnitsPerSecond: Record<PlaybackSpeedMode, number> = {
-  Low: 30,
-  Standard: 180,
-  High: 900,
+  Low: 500,
+  Standard: 1000,
+  High: 3000,
 };
 
 export function buildPlaybackDistanceMap(frames: FrameState[]): number[] {
