@@ -16,8 +16,8 @@ First NC 是一款跨平台 NC 程序查看、编辑与 3D 路径仿真的桌面
     <td align="center"><b>激光一体机模式</b></td>
   </tr>
   <tr>
-    <td><img src="./publ/ic/screenshots/mutli.png" alt="多文件编辑与仿真" width="100%"/></td>
-    <td><img src="./public/screenshots/laser.png" alt="激光一体机模式" width="100%"/></td>
+    <td><img src="https://cdn.jsdelivr.net/gh/jinweifan/first_nc@main/screenshots/mutli.png" alt="多文件编辑与仿真" width="100%"/></td>
+    <td><img src="https://cdn.jsdelivr.net/gh/jinweifan/first_nc@main/screenshots/laser.png" alt="激光一体机模式" width="100%"/></td>
   </tr>
 </table>
 
