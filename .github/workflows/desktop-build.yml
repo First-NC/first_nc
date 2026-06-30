@@ -84,3 +84,39 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact_path }}
           if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          # Gather all installer files and update archives
+          find . -type f \( \
+            -name "*.deb" -o \
+            -name "*.AppImage" -o \
+            -name "*.exe" -o \
+            -name "*.msi" -o \
+            -name "*.dmg" -o \
+            -name "*in-app-update.tar.gz" \
+          \) -exec cp {} release-assets/ \;
+          echo "=== Release assets ==="
+          ls -lh release-assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          body_path: CHANGELOG.md
+          fail_on_unmatched_files: false
+          generate_release_notes: true
+          files: release-assets/*
