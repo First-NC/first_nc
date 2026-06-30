@@ -4,6 +4,23 @@
 
 First NC 是一款跨平台 NC 程序查看、编辑与 3D 路径仿真的桌面应用，支持 Windows、Linux、macOS。
 
+## 下载
+
+前往 [GitHub Releases 页面](https://github.com/jinweifan/first_nc/releases) 下载对应平台的安装包。
+
+## 截图
+
+<table>
+  <tr>
+    <td align="center"><b>多文件 — 编辑与 3D 仿真</b></td>
+    <td align="center"><b>激光一体机模式</b></td>
+  </tr>
+  <tr>
+    <td><img src="./publ/ic/screenshots/mutli.png" alt="多文件编辑与仿真" width="100%"/></td>
+    <td><img src="./public/screenshots/laser.png" alt="激光一体机模式" width="100%"/></td>
+  </tr>
+</table>
+
 ## 快速体验
 
 - 建议先使用仓库内示例文件：`demo_nc/`
